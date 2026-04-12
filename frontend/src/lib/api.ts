@@ -2,9 +2,12 @@ import type { QueryResult, SearchRecord, ModuleInfo } from "@/types";
 
 export type { SearchRecord };
 
-// Empty string = relative paths; Next.js rewrites proxy to uvicorn on port 8001.
-// For local dev without the single-app setup, set NEXT_PUBLIC_API_URL=http://localhost:8000
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+// Server-side (RSC): call uvicorn directly with an absolute URL.
+// Client-side (browser): use relative paths handled by Next.js rewrites.
+const API_BASE =
+  typeof window === "undefined"
+    ? process.env.BACKEND_URL ?? "http://127.0.0.1:8001"
+    : (process.env.NEXT_PUBLIC_API_URL ?? "");
 
 export async function search(
   query: string,
