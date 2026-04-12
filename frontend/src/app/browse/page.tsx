@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { listModules } from "@/lib/api";
 import type { ModuleInfo } from "@/types";

@@ -2,7 +2,9 @@ import type { QueryResult, SearchRecord, ModuleInfo } from "@/types";
 
 export type { SearchRecord };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Empty string = relative paths; Next.js rewrites proxy to uvicorn on port 8001.
+// For local dev without the single-app setup, set NEXT_PUBLIC_API_URL=http://localhost:8000
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export async function search(
   query: string,

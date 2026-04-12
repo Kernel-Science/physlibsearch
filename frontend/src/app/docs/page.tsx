@@ -151,10 +151,10 @@ export default function DocsPage() {
             <p>
               Base URL:{" "}
               <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">
-                http://localhost:8000
-              </code>{" "}
-              (self-hosted) or your deployed instance. All endpoints accept and return JSON.
-              Rate limits apply: <strong>1 req/s</strong> on search, <strong>15 req/min</strong> on augment.
+                https://physlibsearch-8298b71bab83.herokuapp.com
+              </code>
+              . All endpoints accept and return JSON.
+              Rate limits apply: <strong>1 req/s</strong> on search, <strong>15 req/min</strong> on expand.
             </p>
 
             <Endpoint
@@ -188,8 +188,8 @@ export default function DocsPage() {
 
             <Endpoint
               method="POST"
-              path="/augment"
-              description="Augment a natural language query using HyDE. Generates a hypothetical Lean 4 declaration that would answer the query. Pass the result to /search for better embedding alignment."
+              path="/expand"
+              description="Expand a natural language query using HyDE (Hypothetical Document Embeddings). Gemini generates a plausible Lean 4 declaration that would answer the query. Pass the result to /search for better embedding alignment."
               request={`"conservation of angular momentum"`}
               response={`"theorem angularMomentumConservation {J : AngularMomentum} (h : NoExternalTorque J) : IsConserved J := ..."`}
               note="Request body is a raw JSON string (quoted). Response is a raw JSON string."
@@ -239,16 +239,16 @@ export default function DocsPage() {
             <CodeBlock
               lang="bash"
               code={`# Search
-curl -s -X POST http://localhost:8000/search \\
+curl -s -X POST https://physlibsearch-8298b71bab83.herokuapp.com/search \\
   -H "Content-Type: application/json" \\
   -d '{"query": ["Schrödinger equation"], "num_results": 5}' | jq .
 
-# Augment then search
-AUGMENTED=$(curl -s -X POST http://localhost:8000/augment \\
+# Expand query with HyDE, then search
+AUGMENTED=$(curl -s -X POST https://physlibsearch-8298b71bab83.herokuapp.com/expand \\
   -H "Content-Type: application/json" \\
   -d '"conservation of energy"')
 
-curl -s -X POST http://localhost:8000/search \\
+curl -s -X POST https://physlibsearch-8298b71bab83.herokuapp.com/search \\
   -H "Content-Type: application/json" \\
   -d "{\"query\": [$AUGMENTED], \"num_results\": 5}" | jq .`}
             />
@@ -288,13 +288,22 @@ uvicorn server:app --host 0.0.0.0 --port 8000`}
               <a href="https://kernel-science.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-foreground transition-colors">
                 Kernel Science
               </a>
-              . The repository contains the full indexing pipeline, API server, and this frontend.
+              .{" "}
+              <a
+                href="https://github.com/Kernel-Science/physlibsearch"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground transition-colors"
+              >
+                View on GitHub ↗
+              </a>
             </p>
+            <p>The repository contains the full indexing pipeline, API server, and this frontend.</p>
             <ul className="list-disc list-inside flex flex-col gap-1 pl-2 text-foreground/70">
               <li><code className="font-mono text-xs">database/</code> — indexing pipeline (extraction, informalization, embedding)</li>
               <li><code className="font-mono text-xs">server.py</code> — FastAPI REST API</li>
-              <li><code className="font-mono text-xs">retrieve.py</code> — ChromaDB retrieval + HyDE</li>
-              <li><code className="font-mono text-xs">augment.py</code> — HyDE query augmentation</li>
+              <li><code className="font-mono text-xs">engine.py</code> — ChromaDB + PostgreSQL retrieval</li>
+              <li><code className="font-mono text-xs">query_expansion.py</code> — HyDE query expansion</li>
               <li><code className="font-mono text-xs">frontend/</code> — this Next.js interface</li>
             </ul>
           </Section>

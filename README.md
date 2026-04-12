@@ -7,6 +7,8 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![GitHub](https://img.shields.io/badge/github-Kernel--Science%2Fphyslibsearch-black?logo=github)](https://github.com/Kernel-Science/physlibsearch)
 
+**Live at [physlibsearch-8298b71bab83.herokuapp.com](https://physlibsearch-8298b71bab83.herokuapp.com)**
+
 Search PhysLib theorems, definitions, and lemmas using plain English — no Lean syntax required.
 
 ```
