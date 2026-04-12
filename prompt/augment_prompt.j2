@@ -1,0 +1,14 @@
+Given this physics search query, generate a hypothetical Lean 4 declaration from Physlib that would directly answer it. The output will be embedded for semantic search — make it plausible and descriptive. It does not need to compile.
+
+Output format:
+Hypothetical: <kind> <Physlib.Module.declarationName> : <type_signature>
+<Informal name>: <informal description in LaTeX>
+
+Examples:
+Hypothetical: theorem Physlib.Mechanics.Newton.secondLaw : ∀ (m F : ℝ), m > 0 → acceleration m F = F / m
+Newton's Second Law: For a body of mass $m > 0$ and applied force $F$, the acceleration satisfies $a = F/m$.
+
+Hypothetical: definition Physlib.QuantumMechanics.Schrodinger.hamiltonian : HilbertSpace → Observable
+Hamiltonian Operator: The Hamiltonian $\hat{H}$ maps a Hilbert space to an observable representing the total energy of a quantum system.
+
+Input: "{{ input }}"

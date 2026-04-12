@@ -1,0 +1,1 @@
+Represent the given formal physics statement written in Lean 4 concatenated with its natural language explanation for retrieving related statements by natural language query

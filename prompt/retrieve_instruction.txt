@@ -1,0 +1,1 @@
+Given a physics search query, retrieve theorems and definitions stated in bilingual Lean 4 + natural language that physically match the query

@@ -1,0 +1,43 @@
+### Python ###
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+### Virtualenv ###
+.venv/
+venv/
+env/
+
+### Secrets — never commit these ###
+.env
+*.env
+!.env.example
+
+### Database files ###
+/chroma/
+
+### IDE ###
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+### Lean / Lake ###
+.lake/
+*.olean
+*.ilean
+
+### Logs ###
+*.log
+
+### Frontend ###
+frontend/node_modules/
+frontend/.next/
+frontend/out/

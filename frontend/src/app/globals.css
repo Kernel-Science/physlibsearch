@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "katex/dist/katex.min.css";
+
+.katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+}
