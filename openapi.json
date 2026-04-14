@@ -1,0 +1,490 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PhyslibSearch API",
+    "description": "Semantic search engine for PhysLib, a formal Lean 4 physics library. Enables natural language search over Lean theorems, definitions, and lemmas using dense vector retrieval with LLM-powered query expansion (HyDE) and Gemini embeddings.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8001",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/search": {
+      "post": {
+        "summary": "Search declarations by natural language",
+        "description": "Performs semantic search on Lean declarations using one or more natural language queries. Sets a session cookie on single-query requests for feedback tracking.",
+        "operationId": "search",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              },
+              "examples": {
+                "single_query": {
+                  "summary": "Single query",
+                  "value": { "query": ["Newton's second law"], "num_results": 10 }
+                },
+                "multi_query": {
+                  "summary": "Multiple queries",
+                  "value": { "query": ["Newton's second law", "conservation of energy"], "num_results": 5 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Array of result arrays, one per query",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Session UUID cookie set on single-query requests for feedback tracking",
+                "schema": { "type": "string", "example": "session=550e8400-e29b-41d4-a716-446655440000; Path=/; SameSite=lax" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/QueryResult" }
+                  }
+                }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "429": { "$ref": "#/components/responses/RateLimitError" }
+        }
+      }
+    },
+    "/expand": {
+      "post": {
+        "summary": "HyDE query expansion",
+        "description": "Expands a natural language query into a hypothetical Lean declaration using Gemini. The expanded text can be used as input to /search for improved semantic alignment. Falls back to the original query on failure.",
+        "operationId": "expand",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "example": "Newton's second law of motion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Hypothetical Lean declaration, or the original query if expansion failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "example": "theorem Newton.secondLaw (m : ℝ) (a F : EuclideanSpace ℝ (Fin 3)) : F = m • a"
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimitError" }
+        }
+      }
+    },
+    "/fetch": {
+      "post": {
+        "summary": "Fetch declarations by exact Lean name",
+        "description": "Look up one or more declarations by their fully-qualified Lean name. Returns null for names that are not found. Results are returned in the same order as the request.",
+        "operationId": "fetch",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FetchRequest"
+              },
+              "examples": {
+                "example": {
+                  "value": {
+                    "query": [
+                      ["Physlib", "Mechanics", "Newton", "secondLaw"],
+                      ["Physlib", "QuantumMechanics", "HarmonicOscillator"]
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Array of declarations in request order; null for names not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      { "$ref": "#/components/schemas/Declaration" },
+                      { "type": "null" }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "429": { "$ref": "#/components/responses/RateLimitError" }
+        }
+      }
+    },
+    "/modules": {
+      "get": {
+        "summary": "List all indexed modules",
+        "description": "Retrieve metadata for all indexed Lean modules. Only includes modules with at least one visible declaration that has an informal description. Results are sorted alphabetically.",
+        "operationId": "listModules",
+        "responses": {
+          "200": {
+            "description": "List of modules with their declaration counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ModuleInfo" }
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimitError" }
+        }
+      }
+    },
+    "/modules/declarations": {
+      "post": {
+        "summary": "Get all declarations in a module",
+        "description": "Fetch all visible declarations belonging to a specific Lean module, ordered by their source position.",
+        "operationId": "getModuleDeclarations",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeanName"
+              },
+              "examples": {
+                "example": {
+                  "value": ["Physlib", "Mechanics"]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "List of declarations in source order; empty array if module not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Declaration" }
+                }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "429": { "$ref": "#/components/responses/RateLimitError" }
+        }
+      }
+    },
+    "/user-feedback": {
+      "post": {
+        "summary": "Submit general user feedback",
+        "description": "Log structured user feedback about the application experience.",
+        "operationId": "submitUserFeedback",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserFeedbackRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback recorded successfully",
+            "content": {
+              "application/json": {
+                "schema": { "type": "null" }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" },
+          "429": { "$ref": "#/components/responses/RateLimitError" }
+        }
+      }
+    },
+    "/feedback": {
+      "post": {
+        "summary": "Log result feedback",
+        "description": "Track user feedback on individual search results (clicks, thumbs up/down). Requires a session cookie set by /search. If cancel is true, the feedback record is deleted (toggle behavior).",
+        "operationId": "submitResultFeedback",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": true,
+            "description": "Session UUID set by the /search endpoint",
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ResultFeedbackRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Feedback recorded (or deleted if cancel=true)",
+            "content": {
+              "application/json": {
+                "schema": { "type": "null" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or missing session cookie",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorDetail" }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LeanName": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "A fully-qualified Lean name represented as an array of namespace segments",
+        "example": ["Physlib", "Mechanics", "Newton", "secondLaw"]
+      },
+      "DeclarationKind": {
+        "type": "string",
+        "enum": [
+          "abbrev",
+          "axiom",
+          "classInductive",
+          "definition",
+          "example",
+          "inductive",
+          "instance",
+          "opaque",
+          "structure",
+          "theorem",
+          "proofWanted"
+        ],
+        "description": "The syntactic kind of a Lean declaration"
+      },
+      "Declaration": {
+        "type": "object",
+        "required": ["module_name", "kind", "name", "signature", "type", "informal_name", "informal_description"],
+        "properties": {
+          "module_name": {
+            "$ref": "#/components/schemas/LeanName",
+            "description": "The module this declaration belongs to"
+          },
+          "kind": { "$ref": "#/components/schemas/DeclarationKind" },
+          "name": {
+            "$ref": "#/components/schemas/LeanName",
+            "description": "The fully-qualified name of the declaration"
+          },
+          "signature": {
+            "type": "string",
+            "description": "The full Lean signature of the declaration"
+          },
+          "type": {
+            "type": "string",
+            "description": "The type or sort of the declaration"
+          },
+          "value": {
+            "type": "string",
+            "nullable": true,
+            "description": "The implementation or proof body, if available"
+          },
+          "docstring": {
+            "type": "string",
+            "nullable": true,
+            "description": "The Lean docstring, if present"
+          },
+          "informal_name": {
+            "type": "string",
+            "description": "A natural language name generated by Gemini"
+          },
+          "informal_description": {
+            "type": "string",
+            "description": "A LaTeX-compatible natural language description generated by Gemini"
+          }
+        }
+      },
+      "QueryResult": {
+        "type": "object",
+        "required": ["result", "distance"],
+        "properties": {
+          "result": { "$ref": "#/components/schemas/Declaration" },
+          "distance": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "description": "Cosine distance between the query and result embeddings. Lower values indicate higher relevance."
+          }
+        }
+      },
+      "ModuleInfo": {
+        "type": "object",
+        "required": ["name", "count"],
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/LeanName",
+            "description": "The fully-qualified module name"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of visible declarations with informal descriptions in this module"
+          }
+        }
+      },
+      "SearchRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "One or more natural language search queries"
+          },
+          "num_results": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 150,
+            "default": 10,
+            "description": "Maximum number of results to return per query"
+          }
+        }
+      },
+      "FetchRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/LeanName" },
+            "description": "Array of fully-qualified Lean names to fetch"
+          }
+        }
+      },
+      "UserFeedbackRequest": {
+        "type": "object",
+        "required": ["tab_name", "rating", "feedback_type", "message"],
+        "properties": {
+          "tab_name": {
+            "type": "string",
+            "description": "The page or section the user is giving feedback on (e.g. \"search\", \"browse\")"
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "description": "Star rating from 1 to 5"
+          },
+          "feedback_type": {
+            "type": "string",
+            "enum": ["general", "bug", "feature", "improvement"],
+            "default": "general",
+            "description": "Category of feedback"
+          },
+          "message": {
+            "type": "string",
+            "description": "The feedback text"
+          }
+        }
+      },
+      "ResultFeedbackRequest": {
+        "type": "object",
+        "required": ["declaration", "action"],
+        "properties": {
+          "declaration": {
+            "$ref": "#/components/schemas/LeanName",
+            "description": "The Lean name of the declaration being rated"
+          },
+          "action": {
+            "type": "string",
+            "description": "The action taken by the user (e.g. \"click\", \"thumbs_up\", \"thumbs_down\")"
+          },
+          "cancel": {
+            "type": "boolean",
+            "nullable": true,
+            "default": null,
+            "description": "If true, deletes the feedback record instead of inserting it (toggle behavior)"
+          }
+        }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "Human-readable error description"
+          }
+        }
+      },
+      "ValidationErrorDetail": {
+        "type": "object",
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "loc": { "type": "array", "items": {} },
+                "msg": { "type": "string" },
+                "type": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Request body failed validation",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ValidationErrorDetail" }
+          }
+        }
+      },
+      "RateLimitError": {
+        "description": "Rate limit exceeded",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorDetail" },
+            "example": { "detail": "Rate limit exceeded: 1 per 1 second" }
+          }
+        }
+      }
+    }
+  }
+}
