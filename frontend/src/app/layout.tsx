@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 
 export const metadata: Metadata = {
   title: "PhyslibSearch",
@@ -14,7 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <FeedbackButton tabName="general" />
+      </body>
     </html>
   );
 }
