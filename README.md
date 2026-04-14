@@ -2,7 +2,7 @@
 
 **Semantic search for [PhysLib](https://physlib.io/) — the formal Lean 4 physics library.**
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![GitHub](https://img.shields.io/badge/github-Kernel--Science%2Fphyslibsearch-black?logo=github)](https://github.com/Kernel-Science/physlibsearch)
@@ -238,6 +238,14 @@ All configuration is through environment variables (`.env`). See [`.env.example`
 ## Contributing
 
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+
+---
+
+## Next steps
+
+- **Continuous integration** — As PhysLib grows, the database should update automatically when new declarations are merged. The indexing pipeline is designed to be incremental (each SQL step uses `ON CONFLICT DO NOTHING`, and the informalization and embedding steps skip already-processed entries), but this needs to be verified end-to-end for every stage before setting up a CI workflow that triggers on new PhysLib commits.
+
+- **Index QuantumInfo** — The `QuantumInfo` module has not been indexed due to integration issues between PhysLib's QuantumInfo dependencies and jixia. Once resolved, re-running `python -m database jixia` should pick it up without reprocessing the rest of the library.
 
 ---
 

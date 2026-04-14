@@ -86,6 +86,7 @@ export default function DocsPage() {
               ["api", "API Reference"],
               ["self-hosting", "Self-hosting"],
               ["open-source", "Open source"],
+              ["next-steps", "Next steps"],
             ].map(([id, label]) => (
               <a
                 key={id}
@@ -280,6 +281,27 @@ python -m database vector-db    # compute embeddings
 # 2. Run the API
 uvicorn server:app --host 0.0.0.0 --port 8000`}
             />
+          </Section>
+
+          <Section id="next-steps" title="Next steps">
+            <ul className="list-disc list-inside flex flex-col gap-3 pl-2">
+              <li>
+                <strong>Continuous integration.</strong> As PhysLib grows, the database should update
+                automatically when new declarations are merged. The indexing pipeline is designed to be
+                incremental — each SQL step uses{" "}
+                <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">ON CONFLICT DO NOTHING</code>,
+                and the informalization and embedding steps skip already-processed entries — but this needs
+                to be verified end-to-end for every stage before wiring up a CI workflow that triggers on
+                new PhysLib commits.
+              </li>
+              <li>
+                <strong>Index QuantumInfo.</strong> The <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">QuantumInfo</code>{" "}
+                module has not been indexed yet due to integration issues between PhysLib&apos;s QuantumInfo
+                dependencies and jixia. Once resolved, re-running{" "}
+                <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">python -m database jixia</code>{" "}
+                should pick it up incrementally without reprocessing the rest of the library.
+              </li>
+            </ul>
           </Section>
 
           <Section id="open-source" title="Open source">
