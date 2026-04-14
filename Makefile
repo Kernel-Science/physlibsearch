@@ -42,3 +42,13 @@ informal: jixia
 index: informal
 	@echo "\n==> Creating embeddings with Gemini..."
 	python3 -m database vector-db
+
+# Deploy to Heroku via Docker container push (bypasses git large-file limits).
+# chroma/ is gitignored but must be present on disk — restore with:
+#   git fetch heroku && git checkout heroku/main -- chroma/
+deploy:
+	@echo "\n==> Building and pushing Docker image to Heroku..."
+	heroku container:push web --app physlibsearch
+	@echo "\n==> Releasing..."
+	heroku container:release web --app physlibsearch
+	@echo "\n==> Done. Visit https://physlibsearch.net"
