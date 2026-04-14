@@ -19,9 +19,6 @@ env/
 *.env
 !.env.example
 
-### Database files ###
-/chroma/
-
 ### IDE ###
 .idea/
 .vscode/
