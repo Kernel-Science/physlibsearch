@@ -7,6 +7,7 @@ import type { QueryResult } from "@/types";
 import ResultCard from "./ResultCard";
 import Header from "./Header";
 import Footer from "./Footer";
+import { FeedbackButton } from "./feedback/FeedbackButton";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -160,6 +161,8 @@ export default function SearchPage() {
       </main>
 
       <div style={{ position: "relative", zIndex: 1 }}><Footer /></div>
+
+      <FeedbackButton tabName="search" />
     </div>
   );
 }

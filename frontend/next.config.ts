@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
         destination: `${BACKEND_URL}/modules/declarations`,
       },
       { source: "/feedback", destination: `${BACKEND_URL}/feedback` },
+      { source: "/user-feedback", destination: `${BACKEND_URL}/user-feedback` },
     ];
   },
 };

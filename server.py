@@ -105,6 +105,13 @@ class Feedback(BaseModel):
     cancel: bool | None = None
 
 
+class UserFeedback(BaseModel):
+    tab_name: str
+    rating: int
+    feedback_type: str = "general"
+    message: str
+
+
 class ModuleInfo(BaseModel):
     name: LeanName
     count: int
@@ -139,6 +146,24 @@ def module_declarations(request: Request, module_name: LeanName) -> list[Record]
                 ORDER BY d.index
             """, (Jsonb(module_name),))
             return cursor.fetchall()
+
+
+@app.post("/user-feedback")
+@limiter.limit("10/minute")
+async def user_feedback(request: Request, body: UserFeedback):
+    if not (1 <= body.rating <= 5):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Rating must be between 1 and 5")
+    with app.pool.connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO physlibsearch.user_feedback
+                    (tab_name, rating, feedback_type, message, created_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                """,
+                (body.tab_name, body.rating, body.feedback_type, body.message),
+            )
 
 
 @app.post("/feedback")
