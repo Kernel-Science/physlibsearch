@@ -68,7 +68,7 @@ export default function SearchPage() {
                   rel="noopener noreferrer"
                   className="underline underline-offset-2 hover:text-foreground/80 transition-colors"
                 >
-                  PhysLib
+                  Physlib
                 </a>{" "}
                 — the formal Lean 4 physics library
               </p>

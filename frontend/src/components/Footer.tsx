@@ -24,7 +24,7 @@ export default function Footer() {
           rel="noopener noreferrer"
           className="underline underline-offset-2 hover:text-foreground/50 transition-colors"
         >
-          PhysLib
+          Physlib
         </a>{" "}
         & Gemini embeddings
       </span>

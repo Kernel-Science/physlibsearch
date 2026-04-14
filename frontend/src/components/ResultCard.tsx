@@ -33,6 +33,12 @@ function moduleUrl(moduleName: string[]): string {
   return `https://github.com/HEPLean/PhysLean/blob/master/${path}.lean`;
 }
 
+function docUrl(moduleName: string[], name: string[]): string {
+  const path = moduleName.join("/");
+  const anchor = name.join(".");
+  return `https://physlib.io/docs/${path}.html#${anchor}`;
+}
+
 export default function ResultCard({ result, rank }: Props) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -110,14 +116,22 @@ export default function ResultCard({ result, rank }: Props) {
         </div>
       </Card.Content>
 
-      <Card.Footer>
+      <Card.Footer className="flex gap-4">
         <a
-          href={moduleUrl(record.module_name)}
+          href={docUrl(record.module_name, record.name)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors font-mono"
         >
           {formatName(record.name)} ↗
+        </a>
+        <a
+          href={moduleUrl(record.module_name)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-foreground/40 hover:text-foreground/70 transition-colors"
+        >
+          Source ↗
         </a>
       </Card.Footer>
     </Card>
