@@ -38,3 +38,6 @@ env/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+
+### Vector DB ###
+chroma/
