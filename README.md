@@ -1,5 +1,7 @@
 # PhyslibSearch
 
+![PhyslibSearch](frontend/public/PhyslibSearch.png)
+
 **Semantic search for [PhysLib](https://physlib.io/) — the formal Lean 4 physics library.**
 
 [![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue.svg)](LICENSE)
