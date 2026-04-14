@@ -151,7 +151,7 @@ export default function DocsPage() {
             <p>
               Base URL:{" "}
               <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">
-                https://physlibsearch-8298b71bab83.herokuapp.com
+                http://physlibsearch.net
               </code>
               . All endpoints accept and return JSON.
               Rate limits apply: <strong>1 req/s</strong> on search, <strong>15 req/min</strong> on expand.
@@ -239,16 +239,16 @@ export default function DocsPage() {
             <CodeBlock
               lang="bash"
               code={`# Search
-curl -s -X POST https://physlibsearch-8298b71bab83.herokuapp.com/search \\
+curl -s -X POST http://physlibsearch.net/search \\
   -H "Content-Type: application/json" \\
   -d '{"query": ["Schrödinger equation"], "num_results": 5}' | jq .
 
 # Expand query with HyDE, then search
-AUGMENTED=$(curl -s -X POST https://physlibsearch-8298b71bab83.herokuapp.com/expand \\
+AUGMENTED=$(curl -s -X POST http://physlibsearch.net/expand \\
   -H "Content-Type: application/json" \\
   -d '"conservation of energy"')
 
-curl -s -X POST https://physlibsearch-8298b71bab83.herokuapp.com/search \\
+curl -s -X POST http://physlibsearch.net/search \\
   -H "Content-Type: application/json" \\
   -d "{\"query\": [$AUGMENTED], \"num_results\": 5}" | jq .`}
             />
