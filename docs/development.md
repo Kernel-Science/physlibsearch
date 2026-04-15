@@ -80,7 +80,7 @@ If you want to use OpenRouter (or any OpenAI-compatible endpoint) instead of Gem
 ```env
 LLM_API_KEY  = "sk-or-..."
 LLM_BASE_URL = "https://openrouter.ai/api/v1"
-GEMINI_FAST_MODEL = "google/gemini-2.5-flash"   # use the endpoint's model name
+GEMINI_FAST_MODEL = "google/gemini-3-flash-preview"   # use the endpoint's model name
 ```
 
 ---

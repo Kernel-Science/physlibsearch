@@ -228,8 +228,8 @@ All configuration is through environment variables (`.env`). See [`.env.example`
 | `LEAN_SYSROOT` | Yes | Lean 4 toolchain root |
 | `CONNECTION_STRING` | Yes | PostgreSQL connection string |
 | `GEMINI_API_KEY` | Yes | Google Gemini API key |
-| `GEMINI_MODEL` | No | Model for informalization (default: `gemini-2.5-pro`) |
-| `GEMINI_FAST_MODEL` | No | Model for query expansion (default: `gemini-2.5-flash`) |
+| `GEMINI_MODEL` | No | Model for informalization (default: `gemini-3.1-pro-preview`) |
+| `GEMINI_FAST_MODEL` | No | Model for query expansion (default: `gemini-3-flash-preview`) |
 | `GEMINI_EMBEDDING_MODEL` | No | Embedding model (default: `gemini-embedding-2-preview`) |
 | `CHROMA_PATH` | No | ChromaDB storage path (default: `chroma`) |
 | `DRY_RUN` | No | Skip API calls during indexing (default: `false`) |

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { FeedbackButton } from "@/components/feedback/FeedbackButton";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "PhyslibSearch",
@@ -14,10 +15,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>
-        {children}
-        <FeedbackButton tabName="general" />
+    <html lang="en" suppressHydrationWarning>
+      <body className="bg-background text-foreground">
+        <Providers>
+          {children}
+          <FeedbackButton tabName="general" />
+        </Providers>
       </body>
     </html>
   );

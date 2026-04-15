@@ -22,6 +22,12 @@ const KIND_COLORS: Record<DeclarationKind, string> = {
   proofWanted: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
 };
 
+function docUrl(moduleName: string[], name: string[]): string {
+  const path = moduleName.join("/");
+  const anchor = name.join(".");
+  return `https://physlib.io/docs/${path}.html#${anchor}`;
+}
+
 export default function DeclarationItem({ record }: Props) {
   const [expanded, setExpanded] = useState(false);
   const kindColor = KIND_COLORS[record.kind] ?? "bg-slate-500/15 text-slate-400 border-slate-500/30";
@@ -39,7 +45,9 @@ export default function DeclarationItem({ record }: Props) {
               <LatexText text={record.informal_name} />
             </h3>
             <a
-              href={`#${anchor}`}
+              href={docUrl(record.module_name, record.name)}
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-xs text-foreground/30 hover:text-foreground/60 font-mono shrink-0 mt-0.5"
             >
               #{anchor}
@@ -61,6 +69,7 @@ export default function DeclarationItem({ record }: Props) {
             {expanded && (
               <pre className="mt-2 p-3 bg-foreground/5 rounded-lg text-xs font-mono overflow-x-auto text-foreground/65 border border-foreground/10 leading-relaxed whitespace-pre-wrap">
                 {record.signature}
+                {record.value != null && `\n:=\n${record.value}`}
               </pre>
             )}
           </div>

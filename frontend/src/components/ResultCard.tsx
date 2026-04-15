@@ -81,7 +81,10 @@ export default function ResultCard({ result, rank }: Props) {
         <Card.Title className="mt-2 text-lg leading-snug">
           <LatexText text={record.informal_name} />
         </Card.Title>
-        <div className="flex items-center gap-1 mt-1 flex-wrap">
+        <a
+          href={`/browse/${record.module_name.join("/")}`}
+          className="flex items-center gap-1 mt-1 flex-wrap hover:text-foreground/70 transition-colors"
+        >
           {record.module_name.map((part, i) => (
             <span key={i} className="flex items-center gap-1">
               {i > 0 && (
@@ -92,7 +95,7 @@ export default function ResultCard({ result, rank }: Props) {
               </span>
             </span>
           ))}
-        </div>
+        </a>
       </Card.Header>
 
       <Card.Content>
