@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from jixia import LeanProject
-from jixia.structs import LeanName, Symbol, Declaration, is_internal, StringRange
+from jixia.structs import LeanName, Symbol, Declaration, is_internal
 from psycopg import Connection
 from psycopg.types.json import Jsonb
 from psycopg.types.range import Range

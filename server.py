@@ -4,11 +4,9 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 import dotenv
-import psycopg
 from fastapi import FastAPI, Body, Response, Cookie
 from jixia.structs import LeanName
-from psycopg import Connection
-from psycopg.rows import scalar_row, class_row, dict_row
+from psycopg.rows import scalar_row, class_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel
