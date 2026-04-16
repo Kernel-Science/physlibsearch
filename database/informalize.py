@@ -54,9 +54,7 @@ def generate_informal(conn: Connection, batch_size: int = 50, limit_level: int |
         max_level = limit_level
 
     with conn.cursor(row_factory=scalar_row) as cnt_cursor:
-        total_remaining = cnt_cursor.execute(
-            "SELECT COUNT(*) FROM symbol s WHERE NOT EXISTS(SELECT 1 FROM informal i WHERE i.symbol_name = s.name)"
-        ).fetchone() or 0
+        total_remaining = cnt_cursor.execute("SELECT COUNT(*) FROM symbol s WHERE NOT EXISTS(SELECT 1 FROM informal i WHERE i.symbol_name = s.name)").fetchone() or 0
     done = 0
     logger.warning("starting informalization: %d declarations remaining", total_remaining)
 

@@ -23,7 +23,7 @@ class QueryExpander:
         )
         self.model = model
         # Matches everything after "Hypothetical: " — the full hypothetical declaration
-        self.pattern = re.compile(r'Hypothetical:\s*(.*)', re.DOTALL)
+        self.pattern = re.compile(r"Hypothetical:\s*(.*)", re.DOTALL)
 
     async def expand(self, user_input: str) -> str | None:
         """
