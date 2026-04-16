@@ -26,9 +26,9 @@ from engine import QueryResult, PhyslibSearchEngine, Record
 async def lifespan(app: FastAPI):
     dotenv.load_dotenv()
     with ConnectionPool(
-            os.environ["CONNECTION_STRING"],
-            kwargs={"autocommit": True},
-            check=ConnectionPool.check_connection,
+        os.environ["CONNECTION_STRING"],
+        kwargs={"autocommit": True},
+        check=ConnectionPool.check_connection,
     ) as pool:
         app.expander = QueryExpander(os.environ["GEMINI_FAST_MODEL"])
         app.retriever = PhyslibSearchEngine(os.environ["CHROMA_PATH"], None)
@@ -61,25 +61,31 @@ app.add_middleware(SlowAPIMiddleware)
 
 @app.post("/search")
 def search(
-        response: Response,
-        query: list[str],
-        num_results: Annotated[int, Body(gt=0, le=150)] = 10,
+    response: Response,
+    query: list[str],
+    num_results: Annotated[int, Body(gt=0, le=150)] = 10,
 ) -> list[list[QueryResult]]:
     if len(query) == 1:
         with app.retriever.conn.cursor(row_factory=scalar_row) as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                            INSERT INTO physlibsearch.query(id, query, time)
                            VALUES (GEN_RANDOM_UUID(), %s, NOW())
                            RETURNING id
-                           """, (query[0],))
+                           """,
+                (query[0],),
+            )
             session_id = cursor.fetchone()
             response.set_cookie("session", str(session_id))
     else:
         with app.retriever.conn.cursor() as cursor:
-            cursor.executemany("""
+            cursor.executemany(
+                """
                                INSERT INTO physlibsearch.query(id, query, time)
                                VALUES (GEN_RANDOM_UUID(), %s, NOW())
-                               """, [(q,) for q in query])
+                               """,
+                [(q,) for q in query],
+            )
 
     return app.retriever.find_declarations(query, num_results)
 
@@ -136,13 +142,16 @@ def list_modules(request: Request) -> list[ModuleInfo]:
 def module_declarations(request: Request, module_name: LeanName) -> list[Record]:
     with app.pool.connection() as conn:
         with conn.cursor(row_factory=class_row(Record)) as cursor:
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT r.*
                 FROM record r
                 INNER JOIN declaration d ON r.name = d.name
                 WHERE r.module_name = %s AND d.visible = TRUE
                 ORDER BY d.index
-            """, (Jsonb(module_name),))
+            """,
+                (Jsonb(module_name),),
+            )
             return cursor.fetchall()
 
 
@@ -151,6 +160,7 @@ def module_declarations(request: Request, module_name: LeanName) -> list[Record]
 async def user_feedback(request: Request, body: UserFeedback):
     if not (1 <= body.rating <= 5):
         from fastapi import HTTPException
+
         raise HTTPException(status_code=422, detail="Rating must be between 1 and 5")
     with app.pool.connection() as conn:
         with conn.cursor() as cursor:
@@ -169,13 +179,7 @@ async def feedback(session: Annotated[str, Cookie()], body: Feedback):
     query_id = uuid.UUID(session)
     if body.cancel:
         with app.retriever.conn.cursor() as cursor:
-            cursor.execute(
-                "DELETE FROM physlibsearch.feedback WHERE query_id = %s AND declaration_name = %s",
-                (query_id, Jsonb(body.declaration))
-            )
+            cursor.execute("DELETE FROM physlibsearch.feedback WHERE query_id = %s AND declaration_name = %s", (query_id, Jsonb(body.declaration)))
     else:
         with app.retriever.conn.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO physlibsearch.feedback(query_id, declaration_name, action) VALUES (%s, %s, %s)",
-                (query_id, Jsonb(body.declaration), body.action)
-            )
+            cursor.execute("INSERT INTO physlibsearch.feedback(query_id, declaration_name, action) VALUES (%s, %s, %s)", (query_id, Jsonb(body.declaration), body.action))

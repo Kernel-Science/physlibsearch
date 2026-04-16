@@ -11,13 +11,15 @@ from psycopg.types.range import Range
 
 logger = logging.getLogger(__name__)
 
+
 def _get_signature(declaration: Declaration, module_content):
     if declaration.signature.pp is not None:
         return declaration.signature.pp
     elif declaration.signature.range is not None:
         return module_content[declaration.signature.range.as_slice()].decode()
     else:
-        return ''
+        return ""
+
 
 def _get_value(declaration: Declaration, module_content):
     if declaration.value is not None and declaration.value.range is not None:
@@ -25,12 +27,14 @@ def _get_value(declaration: Declaration, module_content):
     else:
         return None
 
+
 def _get_range(declaration: Declaration):
     r = declaration.ref.range
     if r is not None:
         return Range(r.start, r.stop)
     else:
         return None
+
 
 def load_data(project: LeanProject, prefixes: list[LeanName], conn: Connection):
     def load_module(data: Iterable[LeanName], base_dir: Path):
@@ -115,17 +119,19 @@ def load_data(project: LeanProject, prefixes: list[LeanName], conn: Connection):
         for index, decl in enumerate(declarations):
             if is_internal(decl.name) or decl.kind == "proofWanted":
                 continue
-            db_declarations.append({
-                "module_name": Jsonb(module_name),
-                "index"      : index,
-                "name"       : Jsonb(decl.name) if decl.kind != "example" else None,
-                "visible"    : decl.modifiers.visibility != "private" and decl.kind != "example",
-                "docstring"  : decl.modifiers.docstring,
-                "kind"       : decl.kind,
-                "signature"  : _get_signature(decl, module_content),
-                "value"      : _get_value(decl, module_content),
-                "range"      : _get_range(decl),
-            })
+            db_declarations.append(
+                {
+                    "module_name": Jsonb(module_name),
+                    "index": index,
+                    "name": Jsonb(decl.name) if decl.kind != "example" else None,
+                    "visible": decl.modifiers.visibility != "private" and decl.kind != "example",
+                    "docstring": decl.modifiers.docstring,
+                    "kind": decl.kind,
+                    "signature": _get_signature(decl, module_content),
+                    "value": _get_value(decl, module_content),
+                    "range": _get_range(decl),
+                }
+            )
         cursor.executemany(
             """
             INSERT INTO declaration (module_name, index, name, visible, docstring, kind, signature, value)

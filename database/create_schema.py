@@ -90,11 +90,9 @@ def create_schema(conn: Connection):
             INNER JOIN informal i ON d.name = i.symbol_name
             INNER JOIN symbol s ON d.name = s.name
         """,
-
         """
         CREATE SCHEMA physlibsearch
         """,
-
         """
         CREATE TABLE physlibsearch.query (
             id UUID PRIMARY KEY,
@@ -108,7 +106,7 @@ def create_schema(conn: Connection):
             declaration_name JSONB REFERENCES declaration(name) NOT NULL,
             action TEXT NOT NULL,
             PRIMARY KEY (query_id, declaration_name)
-        )"""
+        )""",
     ]
 
     with conn.cursor() as cursor:
