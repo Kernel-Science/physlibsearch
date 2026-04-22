@@ -17,8 +17,8 @@ jobs:
       CHROMA_PATH: chroma
       CONNECTION_STRING: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash-preview-04-17' }}
-      GEMINI_FAST_MODEL: ${{ vars.GEMINI_FAST_MODEL || 'gemini-2.5-flash-preview-04-17' }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3-flash-preview' }}
+      GEMINI_FAST_MODEL: ${{ vars.GEMINI_FAST_MODEL || 'gemini-3-flash-preview' }}
       GEMINI_EMBEDDING_MODEL: ${{ vars.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview' }}
 
     steps:
@@ -27,12 +27,12 @@ jobs:
         with:
           ref: main
 
-      # Authenticate the heroku remote so we can read/write chroma/ storage
-      - name: Authenticate Heroku remote
+      # Add the heroku remote (it doesn't exist in a fresh Actions checkout)
+      - name: Add Heroku remote
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: |
-          git remote set-url heroku "https://heroku:$HEROKU_API_KEY@git.heroku.com/physlibsearch.git"
+          git remote add heroku "https://heroku:$HEROKU_API_KEY@git.heroku.com/physlibsearch.git"
 
       # Restore chroma/ and the SHA tracker from the heroku git remote
       - name: Restore ChromaDB and SHA tracker
