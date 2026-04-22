@@ -14,16 +14,19 @@ def create_vector_db(conn: Connection, path: str, batch_size: int):
 
     client = chromadb.PersistentClient(path)
     try:
-        client.delete_collection("physlibsearch")
-        logger.info("deleted existing physlibsearch collection")
+        collection = client.get_collection(name="physlibsearch", embedding_function=None)
+        existing_ids = set(collection.get(include=[])["ids"])
+        logger.warning("using existing physlibsearch collection (%d vectors)", len(existing_ids))
     except Exception:
-        pass
-    collection = client.create_collection(
-        name="physlibsearch",
-        metadata={"hnsw:space": "cosine"},
-        embedding_function=None,
-    )
+        collection = client.create_collection(
+            name="physlibsearch",
+            metadata={"hnsw:space": "cosine"},
+            embedding_function=None,
+        )
+        existing_ids = set()
+        logger.warning("created new physlibsearch collection")
 
+    added = 0
     with conn.cursor() as cursor:
         cursor.execute("""
             SELECT s.name, d.module_name, d.index, s.kind, d.signature, s.type, i.name, i.description
@@ -40,12 +43,20 @@ def create_vector_db(conn: Connection, path: str, batch_size: int):
             for name, module_name, index, kind, signature, tp, informal_name, informal_description in batch:
                 if signature is None:
                     signature = tp
-                batch_doc.append(f"{kind} {name} {signature}\n{informal_name}: {informal_description}")
                 # NOTE: the space character is not used in names from Physlib and its dependencies
-                batch_id.append(" ".join(str(x) for x in name))
-                if os.environ["DRY_RUN"] == "true":
-                    logger.info("DRY_RUN:skipped embedding: %s", f"{kind} {name} {signature} {informal_name}")
+                vec_id = " ".join(str(x) for x in name)
+                if vec_id in existing_ids:
+                    continue
+                batch_doc.append(f"{kind} {name} {signature}\n{informal_name}: {informal_description}")
+                batch_id.append(vec_id)
+            if not batch_doc:
+                continue
             if os.environ["DRY_RUN"] == "true":
+                for doc in batch_doc:
+                    logger.info("DRY_RUN:skipped embedding: %s", doc)
                 return
             batch_embedding = embedding.embed(batch_doc)
             collection.add(embeddings=batch_embedding, ids=batch_id)
+            added += len(batch_id)
+
+    logger.warning("vector-db: added %d new vectors, %d already existed", added, len(existing_ids))

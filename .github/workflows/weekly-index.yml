@@ -1,0 +1,176 @@
+name: Weekly Index
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # Every Monday at 03:00 UTC
+  workflow_dispatch:      # Manual trigger via GitHub UI
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+
+    env:
+      PHYSLIB_REPO: https://github.com/leanprover-community/physlib
+      JIXIA_REPO: https://github.com/frenzymath/jixia
+      MODULE_NAMES: Physlib
+      DRY_RUN: 'false'
+      CHROMA_PATH: chroma
+      CONNECTION_STRING: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash-preview-04-17' }}
+      GEMINI_FAST_MODEL: ${{ vars.GEMINI_FAST_MODEL || 'gemini-2.5-flash-preview-04-17' }}
+      GEMINI_EMBEDDING_MODEL: ${{ vars.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-2-preview' }}
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      # Authenticate the heroku remote so we can read/write chroma/ storage
+      - name: Authenticate Heroku remote
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          git remote set-url heroku "https://heroku:$HEROKU_API_KEY@git.heroku.com/physlibsearch.git"
+
+      # Restore chroma/ and the SHA tracker from the heroku git remote
+      - name: Restore ChromaDB and SHA tracker
+        run: |
+          git fetch heroku main
+          git checkout heroku/main -- chroma/ .last-physlib-sha 2>/dev/null \
+            || echo "No prior index on heroku/main — starting fresh."
+
+      # Skip everything if PhysLib has not changed since the last run
+      - name: Check PhysLib for new commits
+        id: check
+        run: |
+          CURRENT_SHA=$(git ls-remote "$PHYSLIB_REPO" HEAD | cut -f1)
+          LAST_SHA=$(cat .last-physlib-sha 2>/dev/null || echo "")
+          echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "PhysLib unchanged at $CURRENT_SHA — nothing to do."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "PhysLib changed: $LAST_SHA -> $CURRENT_SHA"
+          fi
+
+      - name: Set up Python
+        if: steps.check.outputs.has_changes == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Python dependencies
+        if: steps.check.outputs.has_changes == 'true'
+        run: pip install -r requirements.txt
+
+      # PhysLib must be cloned before the cache steps so hashFiles() can read lean-toolchain
+      - name: Clone PhysLib
+        if: steps.check.outputs.has_changes == 'true'
+        run: git clone --depth 1 "$PHYSLIB_REPO" physlib
+
+      - name: Cache elan toolchains
+        if: steps.check.outputs.has_changes == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ hashFiles('physlib/lean-toolchain') }}
+
+      - name: Cache PhysLib lake build
+        if: steps.check.outputs.has_changes == 'true'
+        uses: actions/cache@v4
+        with:
+          path: physlib/.lake/build
+          key: physlib-lake-${{ steps.check.outputs.current_sha }}
+          restore-keys: physlib-lake-
+
+      - name: Install elan (Lean version manager)
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
+          if ! command -v elan &>/dev/null; then
+            curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+              | sh -s -- -y --no-modify-path
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Build PhysLib
+        if: steps.check.outputs.has_changes == 'true'
+        run: cd physlib && lake build
+        timeout-minutes: 90
+
+      # jixia must be cloned before its cache step so hashFiles() can read its lakefile
+      - name: Clone jixia
+        if: steps.check.outputs.has_changes == 'true'
+        run: git clone --depth 1 "$JIXIA_REPO" jixia
+
+      - name: Cache jixia build
+        if: steps.check.outputs.has_changes == 'true'
+        uses: actions/cache@v4
+        with:
+          path: jixia/.lake/build
+          key: jixia-${{ hashFiles('physlib/lean-toolchain') }}-${{ hashFiles('jixia/lakefile.lean', 'jixia/lakefile.toml') }}
+          restore-keys: jixia-${{ hashFiles('physlib/lean-toolchain') }}-
+
+      - name: Build jixia
+        if: steps.check.outputs.has_changes == 'true'
+        run: cd jixia && lake build
+        timeout-minutes: 30
+
+      - name: Set JIXIA_PATH and LEAN_SYSROOT
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
+          echo "JIXIA_PATH=$(pwd)/jixia/.lake/build/bin/jixia" >> "$GITHUB_ENV"
+          TOOLCHAIN=$(cat physlib/lean-toolchain)
+          echo "LEAN_SYSROOT=$HOME/.elan/toolchains/$TOOLCHAIN" >> "$GITHUB_ENV"
+
+      # --- Incremental pipeline ---
+      # Each step skips rows/vectors that already exist, so only new theorems are processed.
+
+      - name: Create/update schema
+        if: steps.check.outputs.has_changes == 'true'
+        run: python3 -m database schema
+
+      - name: Load jixia data into PostgreSQL
+        if: steps.check.outputs.has_changes == 'true'
+        run: python3 -m database jixia ./physlib "$MODULE_NAMES"
+
+      - name: Informalize new declarations
+        if: steps.check.outputs.has_changes == 'true'
+        run: python3 -m database informal --batch-size 50
+
+      - name: Embed new declarations into ChromaDB
+        if: steps.check.outputs.has_changes == 'true'
+        run: python3 -m database vector-db --batch-size 8
+
+      # Persist the updated chroma/ and SHA tracker back to the heroku git remote
+      - name: Push updated index to Heroku git remote
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git worktree add /tmp/heroku-tree heroku/main
+          rsync -a --delete chroma/ /tmp/heroku-tree/chroma/
+          echo "${{ steps.check.outputs.current_sha }}" > /tmp/heroku-tree/.last-physlib-sha
+          cd /tmp/heroku-tree
+          git add -f chroma/ .last-physlib-sha
+          git diff --cached --quiet \
+            || git commit -m "chore: weekly index $(date -u +%Y-%m-%d) [physlib ${{ steps.check.outputs.current_sha }}]"
+          git push heroku HEAD:main
+          cd -
+          git worktree remove /tmp/heroku-tree
+
+      # Rebuild and release the Docker image so the live app gets the new chroma/
+      - name: Install Heroku CLI
+        if: steps.check.outputs.has_changes == 'true'
+        run: curl https://cli-assets.heroku.com/install.sh | sh
+
+      - name: Build and release Docker image
+        if: steps.check.outputs.has_changes == 'true'
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          heroku container:push web --app physlibsearch
+          heroku container:release web --app physlibsearch
