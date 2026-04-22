@@ -84,6 +84,7 @@ export default function DocsPage() {
               ["overview", "Overview"],
               ["how-it-works", "How it works"],
               ["api", "API Reference"],
+              ["ai-agents", "AI Agents"],
               ["self-hosting", "Self-hosting"],
               ["open-source", "Open source"],
               ["next-steps", "Next steps"],
@@ -253,6 +254,50 @@ curl -s -X POST http://physlibsearch.net/search \\
   -H "Content-Type: application/json" \\
   -d "{\"query\": [$AUGMENTED], \"num_results\": 5}" | jq .`}
             />
+          </Section>
+
+          <Section id="ai-agents" title="AI Agents">
+            <p>
+              PhyslibSearch ships a{" "}
+              <a
+                href="https://claude.ai/code"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground transition-colors"
+              >
+                Claude Code
+              </a>{" "}
+              skill that teaches any Claude agent how to call the API. Once installed, the agent can
+              search Physlib, fetch declarations by name, and expand queries with HyDE — without any
+              extra configuration.
+            </p>
+            <p className="text-foreground/50">Install the skill (one-time, any project):</p>
+            <CodeBlock
+              lang="bash"
+              code={`mkdir -p ~/.claude/skills/physlibsearch && curl -fsSo ~/.claude/skills/physlibsearch/SKILL.md \\
+  https://raw.githubusercontent.com/Kernel-Science/physlibsearch-skill/main/SKILL.md`}
+            />
+            <p>
+              Then invoke it in any Claude Code session with{" "}
+              <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">/physlibsearch</code>,
+              or just ask Claude to find a Lean theorem and it will load the skill automatically.
+            </p>
+            <p className="text-foreground/50">
+              To use it in a custom agent or system prompt, paste the raw{" "}
+              <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">SKILL.md</code>{" "}
+              content directly into your agent&apos;s context. The skill covers all endpoints,
+              example curl calls, query tips, and how to interpret the{" "}
+              <code className="font-mono text-xs bg-foreground/8 px-1 py-0.5 rounded">distance</code>{" "}
+              field.{" "}
+              <a
+                href="https://github.com/Kernel-Science/physlibsearch-skill"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground transition-colors"
+              >
+                View on GitHub ↗
+              </a>
+            </p>
           </Section>
 
           <Section id="self-hosting" title="Self-hosting">
