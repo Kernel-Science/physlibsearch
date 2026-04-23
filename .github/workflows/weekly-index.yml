@@ -103,8 +103,8 @@ jobs:
 
       - name: Build PhysLib
         if: steps.check.outputs.has_changes == 'true'
-        run: cd physlib && lake build
-        timeout-minutes: 90
+        run: cd physlib && lake exe cache get && lake build
+        timeout-minutes: 30
 
       # jixia must be cloned before its cache step
       - name: Clone jixia
