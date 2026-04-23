@@ -3,7 +3,7 @@ name: Weekly Index
 on:
   schedule:
     - cron: '0 3 * * 1'  # Every Monday at 03:00 UTC
-  workflow_dispatch:      # Manual trigger via GitHub UI
+  workflow_dispatch:
 
 jobs:
   index:
@@ -27,26 +27,31 @@ jobs:
         with:
           ref: main
 
-      # Add the heroku remote (it doesn't exist in a fresh Actions checkout)
-      - name: Add Heroku remote
+      - name: Install Heroku CLI
+        run: curl https://cli-assets.heroku.com/install.sh | sh
+
+      # Pull chroma/ from the live Docker image so the pipeline runs incrementally
+      - name: Extract ChromaDB from current Heroku image
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: |
-          git remote add heroku "https://heroku:$HEROKU_API_KEY@git.heroku.com/physlibsearch.git"
+          heroku container:login
+          docker pull registry.heroku.com/physlibsearch/web || echo "No existing image — starting fresh."
+          CID=$(docker create registry.heroku.com/physlibsearch/web 2>/dev/null) || true
+          if [ -n "$CID" ]; then
+            docker cp "$CID:/app/chroma" . 2>/dev/null || echo "No chroma/ in image — starting fresh."
+            docker rm "$CID"
+          fi
 
-      # Restore chroma/ and the SHA tracker from the heroku git remote
-      - name: Restore ChromaDB and SHA tracker
-        run: |
-          git fetch heroku main
-          git checkout heroku/main -- chroma/ .last-physlib-sha 2>/dev/null \
-            || echo "No prior index on heroku/main — starting fresh."
-
-      # Skip everything if PhysLib has not changed since the last run
+      # Check if PhysLib has changed since the last successful run.
+      # The last SHA is stored as a Heroku config var to avoid git commits.
       - name: Check PhysLib for new commits
         id: check
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: |
           CURRENT_SHA=$(git ls-remote "$PHYSLIB_REPO" HEAD | cut -f1)
-          LAST_SHA=$(cat .last-physlib-sha 2>/dev/null || echo "")
+          LAST_SHA=$(heroku config:get LAST_PHYSLIB_SHA --app physlibsearch 2>/dev/null || echo "")
           echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
           if [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
@@ -67,7 +72,7 @@ jobs:
         if: steps.check.outputs.has_changes == 'true'
         run: pip install -r requirements.txt
 
-      # PhysLib must be cloned before the cache steps so hashFiles() can read lean-toolchain
+      # PhysLib must be cloned before cache steps so hashFiles() can read lean-toolchain
       - name: Clone PhysLib
         if: steps.check.outputs.has_changes == 'true'
         run: git clone --depth 1 "$PHYSLIB_REPO" physlib
@@ -87,7 +92,7 @@ jobs:
           key: physlib-lake-${{ steps.check.outputs.current_sha }}
           restore-keys: physlib-lake-
 
-      - name: Install elan (Lean version manager)
+      - name: Install elan
         if: steps.check.outputs.has_changes == 'true'
         run: |
           if ! command -v elan &>/dev/null; then
@@ -101,7 +106,7 @@ jobs:
         run: cd physlib && lake build
         timeout-minutes: 90
 
-      # jixia must be cloned before its cache step so hashFiles() can read its lakefile
+      # jixia must be cloned before its cache step
       - name: Clone jixia
         if: steps.check.outputs.has_changes == 'true'
         run: git clone --depth 1 "$JIXIA_REPO" jixia
@@ -126,9 +131,7 @@ jobs:
           TOOLCHAIN=$(cat physlib/lean-toolchain)
           echo "LEAN_SYSROOT=$HOME/.elan/toolchains/$TOOLCHAIN" >> "$GITHUB_ENV"
 
-      # --- Incremental pipeline ---
-      # Each step skips rows/vectors that already exist, so only new theorems are processed.
-
+      # Incremental pipeline — each step skips already-processed items
       - name: Create/update schema
         if: steps.check.outputs.has_changes == 'true'
         run: python3 -m database schema
@@ -145,28 +148,7 @@ jobs:
         if: steps.check.outputs.has_changes == 'true'
         run: python3 -m database vector-db --batch-size 8
 
-      # Persist the updated chroma/ and SHA tracker back to the heroku git remote
-      - name: Push updated index to Heroku git remote
-        if: steps.check.outputs.has_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git worktree add /tmp/heroku-tree heroku/main
-          rsync -a --delete chroma/ /tmp/heroku-tree/chroma/
-          echo "${{ steps.check.outputs.current_sha }}" > /tmp/heroku-tree/.last-physlib-sha
-          cd /tmp/heroku-tree
-          git add -f chroma/ .last-physlib-sha
-          git diff --cached --quiet \
-            || git commit -m "chore: weekly index $(date -u +%Y-%m-%d) [physlib ${{ steps.check.outputs.current_sha }}]"
-          git push heroku HEAD:main
-          cd -
-          git worktree remove /tmp/heroku-tree
-
-      # Rebuild and release the Docker image so the live app gets the new chroma/
-      - name: Install Heroku CLI
-        if: steps.check.outputs.has_changes == 'true'
-        run: curl https://cli-assets.heroku.com/install.sh | sh
-
+      # Rebuild the Docker image with the updated chroma/ and deploy
       - name: Build and release Docker image
         if: steps.check.outputs.has_changes == 'true'
         env:
@@ -174,3 +156,4 @@ jobs:
         run: |
           heroku container:push web --app physlibsearch
           heroku container:release web --app physlibsearch
+          heroku config:set LAST_PHYSLIB_SHA=${{ steps.check.outputs.current_sha }} --app physlibsearch
