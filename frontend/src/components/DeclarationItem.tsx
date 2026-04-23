@@ -41,35 +41,37 @@ export default function DeclarationItem({ record }: Props) {
         </span>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-base leading-snug">
+            <h3 className="font-semibold text-base leading-snug min-w-0 break-words">
               <LatexText text={record.informal_name} />
             </h3>
             <a
               href={docUrl(record.module_name, record.name)}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-foreground/30 hover:text-foreground/60 font-mono shrink-0 mt-0.5"
+              className="text-xs text-foreground/30 hover:text-foreground/60 font-mono shrink-0 mt-0.5 hidden sm:block"
             >
               #{anchor}
             </a>
           </div>
 
-          <p className="mt-1.5 text-sm text-foreground/70 leading-relaxed">
+          <p className="mt-1.5 text-sm text-foreground/70 leading-relaxed break-words">
             <LatexText text={record.informal_description} />
           </p>
 
           <div className="mt-3">
             <button
               onClick={() => setExpanded((v) => !v)}
-              className="text-xs text-foreground/35 hover:text-foreground/60 transition-colors flex items-center gap-1"
+              className="text-xs text-foreground/35 hover:text-foreground/60 transition-colors flex items-start gap-1 text-left max-w-full"
             >
-              <span>{expanded ? "▾" : "▸"}</span>
-              <span className="font-mono">{record.name.join(".")}</span>
+              <span className="shrink-0">{expanded ? "▾" : "▸"}</span>
+              <span className="font-mono break-all min-w-0">{record.name.join(".")}</span>
             </button>
             {expanded && (
-              <pre className="mt-2 p-3 bg-foreground/5 rounded-lg text-xs font-mono overflow-x-auto text-foreground/65 border border-foreground/10 leading-relaxed whitespace-pre-wrap">
+              <pre className="mt-2 p-3 bg-foreground/5 rounded-lg text-xs font-mono overflow-x-auto text-foreground/65 border border-foreground/10 leading-relaxed whitespace-pre-wrap break-words">
                 {record.signature}
-                {record.value != null && `\n:=\n${record.value}`}
+                {record.value
+                  ? `\n${record.value.trimStart().startsWith(":=") ? record.value : `:= ${record.value}`}`
+                  : ""}
               </pre>
             )}
           </div>

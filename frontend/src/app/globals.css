@@ -6,3 +6,18 @@
   margin: 0.5em 0;
   overflow-x: auto;
 }
+
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(127 127 127 / 0.2) transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(127 127 127 / 0.2);
+  border-radius: 9999px;
+}
