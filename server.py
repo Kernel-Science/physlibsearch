@@ -9,7 +9,7 @@ from jixia.structs import LeanName
 from psycopg.rows import scalar_row, class_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -120,6 +120,47 @@ class ModuleInfo(BaseModel):
     name: LeanName
     count: int
     docstring: str | None = None
+
+    @field_validator("docstring", mode="before")
+    @classmethod
+    def join_sections(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, list):
+            return "\n\n".join(str(s) for s in v if s)
+        if isinstance(v, str) and v.startswith("{") and v.endswith("}"):
+            # Parse PostgreSQL text[] literal: {"section1","section2",...}
+            inner = v[1:-1]
+            parts: list[str] = []
+            i = 0
+            while i < len(inner):
+                if inner[i] == '"':
+                    j = i + 1
+                    buf: list[str] = []
+                    while j < len(inner):
+                        if inner[j] == "\\" and j + 1 < len(inner):
+                            buf.append(inner[j + 1])
+                            j += 2
+                        elif inner[j] == '"':
+                            j += 1
+                            break
+                        else:
+                            buf.append(inner[j])
+                            j += 1
+                    parts.append("".join(buf))
+                    i = j
+                    if i < len(inner) and inner[i] == ",":
+                        i += 1
+                else:
+                    end = inner.find(",", i)
+                    if end == -1:
+                        end = len(inner)
+                    token = inner[i:end].strip()
+                    if token.upper() not in ("NULL", ""):
+                        parts.append(token)
+                    i = end + 1
+            return "\n\n".join(p for p in parts if p.strip())
+        return v
 
 
 @app.get("/modules")
