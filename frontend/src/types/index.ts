@@ -33,4 +33,5 @@ export interface QueryResult {
 export interface ModuleInfo {
   name: LeanName;
   count: number;
+  docstring: string | null;
 }

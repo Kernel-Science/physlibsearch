@@ -51,6 +51,9 @@ export default async function ModulePage({ params, searchParams }: Props) {
   ]);
 
   const subModules = getDirectChildren(allModules, moduleName);
+  const moduleDocstring = allModules.find(
+    (m) => m.name.length === moduleName.length && m.name.every((p, i) => p === moduleName[i])
+  )?.docstring ?? null;
 
   const filteredDeclarations =
     selectedKinds.length > 0
@@ -103,6 +106,11 @@ export default async function ModulePage({ params, searchParams }: Props) {
               <h1 className="text-2xl font-bold tracking-tight font-mono break-all">
                 {moduleName.join(".")}
               </h1>
+              {moduleDocstring && (
+                <p className="text-foreground/70 text-sm mt-2 leading-relaxed whitespace-pre-wrap">
+                  {moduleDocstring}
+                </p>
+              )}
               <p className="text-foreground/40 text-sm mt-1">
                 {filteredDeclarations.length} declaration
                 {filteredDeclarations.length !== 1 ? "s" : ""}
