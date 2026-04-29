@@ -14,8 +14,8 @@ type Part =
 
 function parseParts(text: string): Part[] {
   const parts: Part[] = [];
-  // Match $$...$$ first (display), then $...$ (inline)
-  const re = /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g;
+  // Match $$...$$, \[...\] (display), then \(...\), $...$ (inline)
+  const re = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^$\n]+?\$)/g;
   let last = 0;
   let match: RegExpExecArray | null;
 
@@ -26,6 +26,10 @@ function parseParts(text: string): Part[] {
     const raw = match[0];
     if (raw.startsWith("$$")) {
       parts.push({ type: "block", latex: raw.slice(2, -2) });
+    } else if (raw.startsWith("\\[")) {
+      parts.push({ type: "block", latex: raw.slice(2, -2) });
+    } else if (raw.startsWith("\\(")) {
+      parts.push({ type: "inline", latex: raw.slice(2, -2) });
     } else {
       parts.push({ type: "inline", latex: raw.slice(1, -1) });
     }
@@ -38,15 +42,46 @@ function parseParts(text: string): Part[] {
   return parts;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+const MATHBB_UNICODE: Record<string, string> = {
+  R: "ℝ", C: "ℂ", Z: "ℤ", N: "ℕ", Q: "ℚ",
+  P: "ℙ", H: "ℍ", F: "𝔽", K: "𝕂",
+};
+
+// The informal-description generator sometimes emits math-mode commands like
+// `\mathbb{R}` inside `\text{...}`, which KaTeX (correctly) refuses to render.
+// Replace those with their Unicode equivalents so the text renders cleanly.
+function sanitizeLatex(latex: string): string {
+  const textGroup = /\\text\{((?:[^{}]|\{[^{}]*\})*)\}/g;
+  return latex.replace(textGroup, (_match, inner: string) => {
+    const fixed = inner.replace(
+      /\\mathbb\{([A-Z])\}/g,
+      (m, letter: string) => MATHBB_UNICODE[letter] ?? m
+    );
+    return `\\text{${fixed}}`;
+  });
+}
+
 function renderLatex(latex: string, displayMode: boolean): string {
+  const source = sanitizeLatex(latex);
   try {
-    return katex.renderToString(latex, {
+    return katex.renderToString(source, {
       displayMode,
-      throwOnError: false,
+      throwOnError: true,
+      strict: "ignore",
       trust: false,
     });
   } catch {
-    return latex;
+    const [open, close] = displayMode ? ["\\[", "\\]"] : ["$", "$"];
+    return escapeHtml(`${open}${latex}${close}`);
   }
 }
 

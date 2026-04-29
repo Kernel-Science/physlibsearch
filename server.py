@@ -119,6 +119,7 @@ class UserFeedback(BaseModel):
 class ModuleInfo(BaseModel):
     name: LeanName
     count: int
+    docstring: str | None = None
 
 
 @app.get("/modules")
@@ -127,11 +128,12 @@ def list_modules(request: Request) -> list[ModuleInfo]:
     with app.pool.connection() as conn:
         with conn.cursor(row_factory=class_row(ModuleInfo)) as cursor:
             cursor.execute("""
-                SELECT d.module_name AS name, COUNT(*) AS count
+                SELECT d.module_name AS name, COUNT(*) AS count, mo.docstring
                 FROM declaration d
+                INNER JOIN module mo ON mo.name = d.module_name
                 WHERE d.visible = TRUE
                   AND EXISTS(SELECT 1 FROM informal i WHERE i.symbol_name = d.name)
-                GROUP BY d.module_name
+                GROUP BY d.module_name, mo.docstring
                 ORDER BY d.module_name
             """)
             return cursor.fetchall()
