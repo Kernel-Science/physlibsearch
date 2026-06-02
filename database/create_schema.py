@@ -5,39 +5,49 @@ from psycopg import Connection
 def create_schema(conn: Connection):
     sql: list[LiteralString] = [
         """
-        CREATE TABLE module (
+        CREATE TABLE IF NOT EXISTS module (
             name JSONB PRIMARY KEY,
             content BYTEA NOT NULL,
             docstring TEXT
         )
         """,
         """
-        CREATE TYPE declaration_kind AS ENUM (
-            'abbrev',
-            'axiom',
-            'classInductive',
-            'definition',
-            'example',
-            'inductive',
-            'instance',
-            'opaque',
-            'structure',
-            'theorem',
-            'proofWanted'
-        )
+        DO $$ BEGIN
+            CREATE TYPE declaration_kind AS ENUM (
+                'abbrev',
+                'axiom',
+                'classInductive',
+                'definition',
+                'example',
+                'inductive',
+                'instance',
+                'opaque',
+                'structure',
+                'theorem',
+                'proofWanted'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$
         """,
-        """CREATE TYPE symbol_kind AS ENUM (
-            'axiom',
-            'definition',
-            'theorem',
-            'opaque',
-            'quotient',
-            'inductive',
-            'constructor',
-            'recursor'
-        )""",
         """
-        CREATE TABLE symbol (
+        DO $$ BEGIN
+            CREATE TYPE symbol_kind AS ENUM (
+                'axiom',
+                'definition',
+                'theorem',
+                'opaque',
+                'quotient',
+                'inductive',
+                'constructor',
+                'recursor'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS symbol (
             name JSONB PRIMARY KEY,
             module_name JSONB REFERENCES module(name) NOT NULL,
             kind symbol_kind NOT NULL,
@@ -46,7 +56,7 @@ def create_schema(conn: Connection):
         )
         """,
         """
-        CREATE TABLE declaration (
+        CREATE TABLE IF NOT EXISTS declaration (
             module_name JSONB REFERENCES module(name) NOT NULL,
             index INTEGER NOT NULL,
             name JSONB UNIQUE REFERENCES symbol(name),
@@ -60,7 +70,7 @@ def create_schema(conn: Connection):
         )
         """,
         """
-        CREATE TABLE dependency (
+        CREATE TABLE IF NOT EXISTS dependency (
             source JSONB REFERENCES symbol(name) NOT NULL,
             target JSONB REFERENCES symbol(name) NOT NULL,
             on_type BOOLEAN NOT NULL,
@@ -68,20 +78,20 @@ def create_schema(conn: Connection):
         )
         """,
         """
-        CREATE TABLE level (
+        CREATE TABLE IF NOT EXISTS level (
             symbol_name JSONB PRIMARY KEY REFERENCES symbol(name) NOT NULL,
             level INTEGER NOT NULL
         )
         """,
         """
-        CREATE TABLE informal (
+        CREATE TABLE IF NOT EXISTS informal (
             symbol_name JSONB PRIMARY KEY REFERENCES symbol(name) NOT NULL,
             name TEXT NOT NULL,
             description TEXT NOT NULL
         )
         """,
         """
-        CREATE VIEW record AS
+        CREATE OR REPLACE VIEW record AS
         SELECT
             d.module_name, d.index, d.kind, d.name, d.range, d.signature, s.type, d.value, d.docstring,
             i.name AS informal_name, i.description AS informal_description
@@ -91,17 +101,17 @@ def create_schema(conn: Connection):
             INNER JOIN symbol s ON d.name = s.name
         """,
         """
-        CREATE SCHEMA physlibsearch
+        CREATE SCHEMA IF NOT EXISTS physlibsearch
         """,
         """
-        CREATE TABLE physlibsearch.query (
+        CREATE TABLE IF NOT EXISTS physlibsearch.query (
             id UUID PRIMARY KEY,
             query TEXT NOT NULL,
             time TIMESTAMP NOT NULL
         )
         """,
         """
-        CREATE TABLE physlibsearch.feedback (
+        CREATE TABLE IF NOT EXISTS physlibsearch.feedback (
             query_id UUID REFERENCES physlibsearch.query(id) NOT NULL,
             declaration_name JSONB REFERENCES declaration(name) NOT NULL,
             action TEXT NOT NULL,
