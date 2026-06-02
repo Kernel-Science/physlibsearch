@@ -46,7 +46,9 @@ def main():
         if args.command == "schema":
             create_schema(conn)
         elif args.command == "jixia":
-            project = LeanProject(args.project_root)
+            # jixia runs each module with cwd=project_root, so the module file
+            # path must be absolute — a relative root would be resolved twice.
+            project = LeanProject(os.path.abspath(args.project_root))
             prefixes = [parse_name(p) for p in args.prefixes.split(",")]
             load_data(project, prefixes, conn)
         elif args.command == "informal":

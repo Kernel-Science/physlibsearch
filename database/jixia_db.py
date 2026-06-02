@@ -38,7 +38,15 @@ def _get_range(declaration: Declaration):
 
 def load_data(project: LeanProject, prefixes: list[LeanName], conn: Connection):
     def load_module(data: Iterable[LeanName], base_dir: Path):
-        values = ((Jsonb(m), project.path_of_module(m, base_dir).read_bytes(), project.load_module_info(m).docstring) for m in data)
+        values = []
+        for m in data:
+            try:
+                content = project.path_of_module(m, base_dir).read_bytes()
+                docstring = project.load_module_info(m).docstring
+            except FileNotFoundError:
+                logger.warning("skipping module %s: jixia output not found", m)
+                continue
+            values.append((Jsonb(m), content, docstring))
         cursor.executemany(
             """
             INSERT INTO module (name, content, docstring) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING
