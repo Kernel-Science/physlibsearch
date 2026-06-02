@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BrowseSidebar from "@/components/BrowseSidebar";
 import MobileKindFilter from "@/components/MobileKindFilter";
+import ModuleDocstring from "@/components/ModuleDocstring";
 import type { ModuleInfo, DeclarationKind } from "@/types";
 
 interface Props {
@@ -106,11 +107,7 @@ export default async function ModulePage({ params, searchParams }: Props) {
               <h1 className="text-2xl font-bold tracking-tight font-mono break-all">
                 {moduleName.join(".")}
               </h1>
-              {moduleDocstring && (
-                <p className="text-foreground/70 text-sm mt-2 leading-relaxed whitespace-pre-wrap">
-                  {moduleDocstring}
-                </p>
-              )}
+              {moduleDocstring && <ModuleDocstring text={moduleDocstring} />}
               <p className="text-foreground/40 text-sm mt-1">
                 {filteredDeclarations.length} declaration
                 {filteredDeclarations.length !== 1 ? "s" : ""}

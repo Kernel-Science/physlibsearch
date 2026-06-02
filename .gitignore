@@ -41,3 +41,16 @@ frontend/out/
 
 ### Vector DB ###
 chroma/
+
+### Database exports ###
+*.dump
+*.zip
+
+### Paper drafts ###
+paper/
+
+### Screenshots ###
+Capture-*.png
+
+### pnpm (project uses npm) ###
+pnpm-lock.yaml
