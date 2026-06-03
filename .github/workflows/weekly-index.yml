@@ -116,12 +116,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: jixia/.lake/build
-          key: jixia-${{ hashFiles('physlib/lean-toolchain') }}-${{ hashFiles('jixia/lakefile.lean', 'jixia/lakefile.toml') }}
-          restore-keys: jixia-${{ hashFiles('physlib/lean-toolchain') }}-
+          # v2: rebuilt against PhysLib's toolchain (see Build jixia below)
+          key: jixia-v2-${{ hashFiles('physlib/lean-toolchain') }}-${{ hashFiles('jixia/lakefile.lean', 'jixia/lakefile.toml') }}
+          restore-keys: jixia-v2-${{ hashFiles('physlib/lean-toolchain') }}-
 
       - name: Build jixia
         if: steps.check.outputs.has_changes == 'true'
-        run: cd jixia && lake build
+        # jixia reads PhysLib's compiled .olean files, which are version-locked
+        # to PhysLib's Lean toolchain. Build jixia with the same toolchain so the
+        # olean headers are compatible (otherwise: "incompatible header").
+        run: |
+          cp physlib/lean-toolchain jixia/lean-toolchain
+          cd jixia && lake build
         timeout-minutes: 30
 
       - name: Set JIXIA_PATH and LEAN_SYSROOT
