@@ -16,14 +16,15 @@ def _get_signature(declaration: Declaration, module_content):
     if declaration.signature.pp is not None:
         return declaration.signature.pp
     elif declaration.signature.range is not None:
-        return module_content[declaration.signature.range.as_slice()].decode()
+        # A range may not land on a UTF-8 boundary; don't let it abort the load.
+        return module_content[declaration.signature.range.as_slice()].decode(errors="replace")
     else:
         return ""
 
 
 def _get_value(declaration: Declaration, module_content):
     if declaration.value is not None and declaration.value.range is not None:
-        return module_content[declaration.value.range.as_slice()].decode()
+        return module_content[declaration.value.range.as_slice()].decode(errors="replace")
     else:
         return None
 
