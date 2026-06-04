@@ -176,12 +176,18 @@ def load_data(project: LeanProject, prefixes: list[LeanName], conn: Connection):
     with conn.cursor() as cursor:
         lean_sysroot = Path(os.environ["LEAN_SYSROOT"])
         lean_src = lean_sysroot / "src" / "lean"
+        # Each jixia worker loads the full Mathlib environment (~2-3 GB), so the
+        # default thread count (CPUs + 4) can exhaust memory and get the process
+        # OOM-killed. Cap it via JIXIA_MAX_WORKERS in memory-constrained CI.
+        max_workers_env = os.environ.get("JIXIA_MAX_WORKERS")
+        max_workers = int(max_workers_env) if max_workers_env else None
         all_modules = []
         for d in project.root, lean_src:
             results = project.batch_run_jixia(
                 base_dir=d,
                 prefixes=prefixes,
                 plugins=["module", "declaration", "symbol"],
+                max_workers=max_workers,
             )
             modules = [r[0] for r in results]
             load_module(modules, d)
