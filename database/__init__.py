@@ -42,7 +42,18 @@ def main():
 
     args = parser.parse_args()
 
-    with psycopg.connect(os.environ["CONNECTION_STRING"], autocommit=True) as conn:
+    # The jixia analysis phase can run 30-60+ min with no DB traffic at all.
+    # GitHub Actions runners sit behind Azure's outbound NAT, whose default
+    # idle timeout (~4 min) silently drops the connection before that phase
+    # ends. TCP keepalives (well under 4 min) keep the NAT mapping alive.
+    with psycopg.connect(
+        os.environ["CONNECTION_STRING"],
+        autocommit=True,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+    ) as conn:
         if args.command == "schema":
             create_schema(conn)
         elif args.command == "jixia":
