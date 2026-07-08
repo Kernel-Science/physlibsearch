@@ -180,6 +180,7 @@ def load_data(project: LeanProject, analysis: list[tuple[Path, list[LeanName]]],
                 SELECT name, 0
                 FROM symbol v
                 WHERE NOT EXISTS (SELECT 1 FROM dependency e WHERE e.source = v.name)
+            ON CONFLICT DO NOTHING
         """)
         while cursor.rowcount:
             logger.info("topological sort: %d rows affected", cursor.rowcount)
@@ -193,6 +194,7 @@ def load_data(project: LeanProject, analysis: list[tuple[Path, list[LeanName]]],
                     GROUP BY e.source
                     HAVING
                         EVERY(l.level IS NOT NULL) = TRUE
+                ON CONFLICT DO NOTHING
             """)
 
     with conn.cursor() as cursor:
