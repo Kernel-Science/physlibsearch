@@ -22,3 +22,20 @@ frontend/out/
 Dockerfile
 .dockerignore
 heroku.yml
+
+# Nothing below is needed at runtime. Keeping it out matters: the web image is
+# pulled on every dyno start, so extra weight directly slows boots.
+.git/
+.github/
+.gitignore
+db_export.zip
+*.zip
+*.dump
+paper/
+*.png
+*.jpg
+# NOTE: prompt/ and docs/ are NOT excluded — prompt/ holds Jinja templates the
+# server loads at runtime (query_expansion.py reads prompt/augment_prompt.j2).
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
