@@ -1,9 +1,14 @@
-name: Weekly Index
+name: Index
 
 on:
   schedule:
-    - cron: '0 3 * * 1'  # Every Monday at 03:00 UTC
+    - cron: '0 3 * * *'  # Daily at 03:00 UTC
   workflow_dispatch:
+
+# Never let two indexing runs touch the database or Heroku image at once.
+concurrency:
+  group: index
+  cancel-in-progress: false
 
 jobs:
   index:
@@ -18,6 +23,11 @@ jobs:
       # runner (16 GB) doesn't get OOM-killed during the load step.
       JIXIA_MAX_WORKERS: '2'
       CHROMA_PATH: chroma
+      # The web dyno loads chroma/ into RAM at boot alongside Node/Next.js, so
+      # this index competes with the app for the dyno's memory. Warn well before
+      # it gets close (Basic/Standard-1X = 512 MB, Standard-2X = 1024 MB).
+      CHROMA_MAX_MB: '250'
+      HEALTHCHECK_URL: https://physlibsearch.net
       CONNECTION_STRING: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3-flash-preview' }}
@@ -124,45 +134,133 @@ jobs:
           restore-keys: jixia-v2-${{ hashFiles('physlib/lean-toolchain') }}-
 
       - name: Build jixia
+        id: build_jixia
         if: steps.check.outputs.has_changes == 'true'
         # jixia reads PhysLib's compiled .olean files, which are version-locked
         # to PhysLib's Lean toolchain. Build jixia with the same toolchain so the
         # olean headers are compatible (otherwise: "incompatible header").
+        #
+        # PhysLib bumps Lean faster than jixia supports it, so this build can
+        # legitimately fail on a brand-new Lean release. That is an upstream lag,
+        # not a bug in this repo: don't fail the run over it (see the gate below).
+        continue-on-error: true
         run: |
           cp physlib/lean-toolchain jixia/lean-toolchain
           cd jixia && lake build
         timeout-minutes: 30
 
+      # Decide whether indexing can proceed. Skipping cleanly here keeps the site
+      # serving the last good index instead of failing the daily run outright.
+      - name: Gate on jixia compatibility
+        id: gate
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.has_changes }}" != "true" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "PhysLib unchanged — nothing to index."
+          elif [ "${{ steps.build_jixia.outcome }}" = "success" ]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            TOOLCHAIN=$(cat physlib/lean-toolchain 2>/dev/null || echo unknown)
+            echo "::warning title=Indexing skipped::jixia failed to build against PhysLib's Lean toolchain ($TOOLCHAIN). The index was NOT updated; the site keeps serving the previous index. This clears once jixia supports this Lean release."
+            {
+              echo "## ⚠️ Indexing skipped — jixia/Lean incompatibility"
+              echo ""
+              echo "PhysLib is on \`$TOOLCHAIN\`, and jixia does not compile against it."
+              echo "jixia must be built with PhysLib's exact Lean version to read its \`.olean\` files."
+              echo ""
+              echo "**Impact:** the index was not updated. The site is unaffected and still serves the previous index."
+              echo ""
+              echo "**Resolution:** wait for jixia to support this Lean release, or pin PhysLib to a commit on a supported toolchain."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Set JIXIA_PATH and LEAN_SYSROOT
-        if: steps.check.outputs.has_changes == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         run: |
           echo "JIXIA_PATH=$(pwd)/jixia/.lake/build/bin/jixia" >> "$GITHUB_ENV"
           TOOLCHAIN=$(cat physlib/lean-toolchain)
           echo "LEAN_SYSROOT=$HOME/.elan/toolchains/$TOOLCHAIN" >> "$GITHUB_ENV"
 
-      # Incremental pipeline — each step skips already-processed items
+      # Incremental pipeline — each step skips already-processed items.
+      #
+      # Every step below is idempotent and resumable, so transient failures
+      # (dropped Postgres connections over the multi-hour run, flaky Gemini
+      # calls) are retried rather than failing the whole run. A retry re-runs
+      # only the work that is still outstanding.
       - name: Create/update schema
-        if: steps.check.outputs.has_changes == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         run: python3 -m database schema
 
       - name: Load jixia data into PostgreSQL
-        if: steps.check.outputs.has_changes == 'true'
-        run: python3 -m database jixia ./physlib "$MODULE_NAMES"
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          for attempt in 1 2 3; do
+            if python3 -m database jixia ./physlib "$MODULE_NAMES"; then exit 0; fi
+            echo "::warning::jixia load attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          echo "::error::jixia load failed after 3 attempts"
+          exit 1
 
       - name: Informalize new declarations
-        if: steps.check.outputs.has_changes == 'true'
-        run: python3 -m database informal --batch-size 50
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          for attempt in 1 2 3; do
+            if python3 -m database informal --batch-size 50; then exit 0; fi
+            echo "::warning::informalize attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          echo "::error::informalize failed after 3 attempts"
+          exit 1
 
       - name: Embed new declarations into ChromaDB
-        if: steps.check.outputs.has_changes == 'true'
-        run: python3 -m database vector-db --batch-size 8
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          for attempt in 1 2 3; do
+            if python3 -m database vector-db --batch-size 8; then exit 0; fi
+            echo "::warning::embedding attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          echo "::error::embedding failed after 3 attempts"
+          exit 1
+
+      # Guard against shipping an image whose ChromaDB would OOM the dyno.
+      # The web dyno loads this index into memory at boot alongside Node.
+      - name: Check ChromaDB size against dyno memory budget
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          SIZE_MB=$(du -sm chroma | cut -f1)
+          echo "ChromaDB size: ${SIZE_MB} MB (warn threshold: ${CHROMA_MAX_MB} MB)"
+          echo "ChromaDB size: ${SIZE_MB} MB" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SIZE_MB" -gt "$CHROMA_MAX_MB" ]; then
+            echo "::warning title=ChromaDB approaching memory budget::chroma/ is ${SIZE_MB} MB (threshold ${CHROMA_MAX_MB} MB). The web dyno loads this into RAM at startup; upgrade the dyno or prune the index before it OOMs."
+          fi
 
       # Rebuild the Docker image with the updated chroma/ and deploy
       - name: Build and release Docker image
-        if: steps.check.outputs.has_changes == 'true'
+        if: steps.gate.outputs.proceed == 'true'
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: |
           heroku container:push web --app physlibsearch
           heroku container:release web --app physlibsearch
           heroku config:set LAST_PHYSLIB_SHA=${{ steps.check.outputs.current_sha }} --app physlibsearch
+
+      # Fail loudly if the deploy did not actually come up.
+      - name: Verify deployment is healthy
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          echo "Waiting for the new release to serve traffic..."
+          for attempt in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 20 "$HEALTHCHECK_URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Site healthy (HTTP 200) after $attempt attempt(s)."
+              exit 0
+            fi
+            echo "attempt $attempt: HTTP $CODE — retrying in 15s"
+            sleep 15
+          done
+          echo "::error title=Deploy unhealthy::Site did not return HTTP 200 within ~5 minutes of release. Check 'heroku logs --app physlibsearch' — a common cause is the dyno running out of memory loading chroma/."
+          exit 1
