@@ -57,6 +57,11 @@ def main():
         with _connect() as conn:
             create_schema(conn)
     elif args.command == "jixia":
+        if not os.environ.get("JIXIA_PATH"):
+            raise SystemExit(
+                "JIXIA_PATH is not set. It must point at the jixia binary, e.g. "
+                "jixia/.lake/build/bin/jixia"
+            )
         # jixia runs each module with cwd=project_root, so the module file
         # path must be absolute — a relative root would be resolved twice.
         project = LeanProject(os.path.abspath(args.project_root))
