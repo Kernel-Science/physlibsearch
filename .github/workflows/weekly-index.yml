@@ -129,9 +129,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: jixia/.lake/build
-          # v2: rebuilt against PhysLib's toolchain (see Build jixia below)
-          key: jixia-v2-${{ hashFiles('physlib/lean-toolchain') }}-${{ hashFiles('jixia/lakefile.lean', 'jixia/lakefile.toml') }}
-          restore-keys: jixia-v2-${{ hashFiles('physlib/lean-toolchain') }}-
+          # Keyed on the compatibility patch too: editing the patch must not reuse
+          # a build made from the previous one. A stale cached .olean is exactly
+          # what hid the Analyzer/Process.lean failure during local testing.
+          key: jixia-v3-${{ hashFiles('physlib/lean-toolchain') }}-${{ hashFiles('jixia/lakefile.lean', 'jixia/lakefile.toml') }}-${{ hashFiles('patches/jixia-lean-4.32.patch') }}
+          restore-keys: jixia-v3-${{ hashFiles('physlib/lean-toolchain') }}-
 
       - name: Build jixia
         id: build_jixia
