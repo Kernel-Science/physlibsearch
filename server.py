@@ -60,7 +60,19 @@ app.add_middleware(SlowAPIMiddleware)
 
 
 @app.post("/search")
+# /search inherited the global 1/second default because it had no decorator of
+# its own, while cheaper endpoints (/fetch at 10/second) were given explicit,
+# larger budgets. That was an omission rather than a decision, and it was the
+# binding constraint on the theorem-proving client, which issues one search per
+# subgoal attempt.
+#
+# 20/second is still a ceiling, deliberately: every /search makes a paid Gemini
+# embedding call before it reaches Chroma, so an unbounded endpoint is an
+# unbounded bill as well as a way to exhaust the threadpool — the handler is
+# sync and GeminiEmbedding retries for up to 50s before giving up.
+@limiter.limit("20/second")
 def search(
+    request: Request,
     response: Response,
     query: list[str],
     num_results: Annotated[int, Body(gt=0, le=150)] = 10,
