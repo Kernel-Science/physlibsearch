@@ -1,0 +1,45 @@
+Fix jixia to compile against Lean v4.32.0.
+
+PhysLib tracks Lean releases faster than jixia does. jixia must be built with
+PhysLib's exact toolchain to read its .olean files, so when PhysLib moved to
+v4.32.0 (2026-07-21) indexing stopped: jixia's Declaration.lean no longer
+compiled, and the pipeline skipped every run from 2026-07-29 onward.
+
+Lean tightened `do`-block elaboration: `let x := \u2190 e` is no longer accepted
+where `let x \u2190 e` is meant, `return` inside these branches now infers the
+wrong type, and the else-branch needs an explicit `Option Syntax` annotation.
+These are syntax/API migrations only \u2014 no behavior change. Verified by
+building against v4.32.0 and confirming declaration, symbol, and docstring
+extraction match expectations.
+
+Derived from jarfo/jixia@v4.33.0-rc2, adapted for v4.32.0 (that branch targets
+4.33, where `docString?` takes one field instead of two).
+
+Remove this patch once upstream jixia supports the toolchain PhysLib is on;
+the workflow applies it only when the unpatched build fails.
+
+--- a/Analyzer/Process/Declaration.lean	2026-08-15 19:33:12
++++ b/Analyzer/Process/Declaration.lean	2026-08-15 19:27:20
+@@ -226,10 +226,10 @@
+       Syntax.node2 .none ``Command.optDeclSig decl[2] decl[4]
+     | _ => unreachable!
+ 
+-  let (id, binders, type, value) := ← if isDefLike decl then do
++  let (id, binders, type, value) ← if isDefLike decl then do
+     let defView ← mkDefView modifiers decl
+-    return (defView.declId, defView.binders, defView.type?, some defView.value)
+-  else
++    pure (defView.declId, defView.binders, defView.type?, some defView.value)
++  else do
+     let (binders, type) := match kind with
+     | ``Command.«axiom» =>
+       expandDeclSig decl[2] |>.map id some
+@@ -239,7 +239,7 @@
+     | ``Command.«structure» =>
+       (decl[2], decl[4])
+     | _ => unreachable!
+-    return (decl[1], binders, type, none)
++    pure (decl[1], binders, type, (none : Option Syntax))
+ 
+   let name := id[0].getId
+   let name ← getFullname modifiers name

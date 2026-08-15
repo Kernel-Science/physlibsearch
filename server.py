@@ -36,7 +36,19 @@ async def lifespan(app: FastAPI):
         yield
 
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["1/second"])
+def client_key(request: Request) -> str:
+    # Requests reach this app through two proxies (the platform router, then the
+    # Next.js rewrite), so the socket peer is always 127.0.0.1 -- keying on it
+    # would put every visitor in one shared bucket and let a handful of users
+    # rate-limit everyone else. Use the originating client from X-Forwarded-For
+    # (leftmost entry) and fall back to the peer address only if it's absent.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=client_key, default_limits=["1/second"])
 app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

@@ -140,17 +140,35 @@ jobs:
         # to PhysLib's Lean toolchain. Build jixia with the same toolchain so the
         # olean headers are compatible (otherwise: "incompatible header").
         #
-        # PhysLib bumps Lean faster than jixia supports it, so this build can
-        # legitimately fail on a brand-new Lean release. That is an upstream lag,
-        # not a bug in this repo: don't fail the run over it (see the gate below).
+        # PhysLib bumps Lean faster than jixia supports it, so the stock build can
+        # fail on a new Lean release. When that happens, retry with our local
+        # compatibility patch. The patch is applied ONLY as a fallback, so the day
+        # upstream catches up we silently go back to stock and the patch can be
+        # deleted. If neither builds, the gate below skips indexing.
         continue-on-error: true
         run: |
           cp physlib/lean-toolchain jixia/lean-toolchain
-          cd jixia && lake build
+          cd jixia
+          if lake build; then
+            echo "jixia built from upstream unpatched."
+            exit 0
+          fi
+          PATCH=../patches/jixia-lean-4.32.patch
+          echo "::warning::Stock jixia build failed; retrying with $PATCH"
+          if ! git apply "$PATCH"; then
+            echo "::error::Compatibility patch no longer applies to upstream jixia. It likely needs regenerating for the current jixia/Lean versions."
+            exit 1
+          fi
+          lake build
+          echo "jixia built with local compatibility patch."
         timeout-minutes: 30
 
-      # Decide whether indexing can proceed. Skipping cleanly here keeps the site
-      # serving the last good index instead of failing the daily run outright.
+      # Decide whether indexing can proceed.
+      #
+      # "PhysLib unchanged" is a real no-op and passes quietly. But if PhysLib has
+      # new content we cannot index, the run FAILS: a daily green check that
+      # silently indexes nothing is how this went unnoticed for weeks. The site is
+      # unaffected either way -- it keeps serving the last good index.
       - name: Gate on jixia compatibility
         id: gate
         if: always()
@@ -173,7 +191,10 @@ jobs:
               echo "**Impact:** the index was not updated. The site is unaffected and still serves the previous index."
               echo ""
               echo "**Resolution:** wait for jixia to support this Lean release, or pin PhysLib to a commit on a supported toolchain."
+              echo ""
+              echo "This run is FAILED on purpose: PhysLib has new content that is not being indexed."
             } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
 
       - name: Set JIXIA_PATH and LEAN_SYSROOT
@@ -203,6 +224,31 @@ jobs:
           done
           echo "::error::jixia load failed after 3 attempts"
           exit 1
+
+      # A jixia build that compiles is not necessarily one that parses correctly,
+      # which matters most when the compatibility patch above is in use. The load
+      # is additive (ON CONFLICT DO NOTHING), so a broken analyzer shows up as a
+      # load that adds nothing rather than as an error. Catch that here.
+      - name: Sanity-check what the load produced
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          python3 - <<'PY'
+          import os, sys, psycopg
+          with psycopg.connect(os.environ["CONNECTION_STRING"], autocommit=True) as conn, conn.cursor() as c:
+              c.execute("SELECT COUNT(*) FROM module")
+              modules = c.fetchone()[0]
+              c.execute("SELECT COUNT(*) FROM symbol")
+              symbols = c.fetchone()[0]
+              c.execute("SELECT COUNT(*) FROM declaration")
+              declarations = c.fetchone()[0]
+          print(f"modules={modules} symbols={symbols} declarations={declarations}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
+              fh.write(f"\nIndex after load: {modules} modules, {symbols} symbols, {declarations} declarations\n")
+          # These floors would only be crossed by a analyzer producing garbage;
+          # normal incremental runs land far above them.
+          if modules < 100 or symbols < 1000 or declarations < 1000:
+              sys.exit("::error::Implausibly small index after load — treating as a bad jixia build rather than publishing it.")
+          PY
 
       - name: Informalize new declarations
         if: steps.gate.outputs.proceed == 'true'
