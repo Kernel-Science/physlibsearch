@@ -12,6 +12,17 @@ build/
 .idea/
 .vscode/
 .DS_Store
+# Leading-slash-free patterns still only match at the root, so spell out the
+# nested case: the indexing workflow clones and BUILDS these two repos inside
+# the working directory, and `COPY . .` would otherwise bake the whole Lean
+# toolchain into the web image. That is what happened on 2026-08-16 -- physlib/
+# alone was 14 GB, the image reached 21 GB, and the dyno could not start inside
+# the platform's boot window. Neither repo is needed at runtime.
+physlib/
+jixia/
+**/.lake/
+**/*.olean
+**/*.ilean
 .lake/
 *.olean
 *.ilean
