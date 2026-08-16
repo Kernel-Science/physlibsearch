@@ -27,6 +27,9 @@ jobs:
       # this index competes with the app for the dyno's memory. Warn well before
       # it gets close (Basic/Standard-1X = 512 MB, Standard-2X = 1024 MB).
       CHROMA_MAX_MB: '250'
+      # A healthy image is ~3 GB. On 2026-08-16 a 21 GB image shipped (physlib/
+      # and jixia/ leaked into the build context) and the dyno could not boot.
+      IMAGE_MAX_MB: '6000'
       HEALTHCHECK_URL: https://physlibsearch.net
       CONNECTION_STRING: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -310,8 +313,26 @@ jobs:
           echo "prev=$PREV" >> "$GITHUB_OUTPUT"
           echo "Will roll back to v$PREV if the new release is unhealthy."
 
-      # Rebuild the Docker image with the updated chroma/ and deploy
-      - name: Build and release Docker image
+      # The build context contains the cloned+built physlib/ and jixia/ trees.
+      # If .dockerignore ever stops excluding them, the image balloons past what
+      # the platform can boot in its startup window and the site goes down. Check
+      # the built image before releasing it rather than after.
+      - name: Build image and check its size
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          docker build -t physlibsearch-web .
+          SIZE_MB=$(docker image inspect physlibsearch-web --format '{{.Size}}' | awk '{printf "%d", $1/1048576}')
+          echo "Built image: ${SIZE_MB} MB (limit ${IMAGE_MAX_MB} MB)"
+          echo "Built image: ${SIZE_MB} MB" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$SIZE_MB" -gt "$IMAGE_MAX_MB" ]; then
+            docker run --rm --entrypoint sh physlibsearch-web -c 'du -sh /app/* 2>/dev/null | sort -rh | head -10' || true
+            echo "::error title=Image too large to deploy::Built image is ${SIZE_MB} MB (limit ${IMAGE_MAX_MB} MB). The dyno cannot pull and boot this within the platform's startup window. Largest /app entries are listed above -- most likely .dockerignore stopped excluding physlib/ or jixia/."
+            exit 1
+          fi
+
+      - name: Release Docker image
         if: steps.gate.outputs.proceed == 'true'
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
