@@ -286,6 +286,30 @@ jobs:
             echo "::warning title=ChromaDB approaching memory budget::chroma/ is ${SIZE_MB} MB (threshold ${CHROMA_MAX_MB} MB). The web dyno loads this into RAM at startup; upgrade the dyno or prune the index before it OOMs."
           fi
 
+      # Record what is currently serving, so a bad deploy can be undone.
+      - name: Record current release for rollback
+        id: prev_release
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          # Roll back onto the last release that actually shipped an image. Config-var
+          # releases don't carry one, so rolling back onto them would not change the
+          # running code. Container releases are identified by their description.
+          PREV=$(heroku releases --app physlibsearch --num 30 --json | python3 -c '
+          import json, sys
+          releases = json.load(sys.stdin)
+          for r in releases:
+              desc = r.get("description", "")
+              if desc.startswith("Deployed web") or desc.startswith("Rollback to"):
+                  print(r["version"])
+                  break
+          else:
+              sys.exit("no image-bearing release found in the last 30")
+          ')
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          echo "Will roll back to v$PREV if the new release is unhealthy."
+
       # Rebuild the Docker image with the updated chroma/ and deploy
       - name: Build and release Docker image
         if: steps.gate.outputs.proceed == 'true'
@@ -294,11 +318,16 @@ jobs:
         run: |
           heroku container:push web --app physlibsearch
           heroku container:release web --app physlibsearch
-          heroku config:set LAST_PHYSLIB_SHA=${{ steps.check.outputs.current_sha }} --app physlibsearch
 
-      # Fail loudly if the deploy did not actually come up.
-      - name: Verify deployment is healthy
+      # Verify the new release actually serves traffic, and put the previous one
+      # back if it does not. A failed index is an inconvenience; a site that stays
+      # down until someone notices is not, and that is exactly what happened on
+      # 2026-08-16 (deployed 03:41, still down at 08:12).
+      - name: Verify deployment, roll back if unhealthy
+        id: verify
         if: steps.gate.outputs.proceed == 'true'
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: |
           echo "Waiting for the new release to serve traffic..."
           for attempt in $(seq 1 20); do
@@ -310,5 +339,43 @@ jobs:
             echo "attempt $attempt: HTTP $CODE — retrying in 15s"
             sleep 15
           done
-          echo "::error title=Deploy unhealthy::Site did not return HTTP 200 within ~5 minutes of release. Check 'heroku logs --app physlibsearch' — a common cause is the dyno running out of memory loading chroma/."
+
+          echo "::error title=Deploy unhealthy — rolling back::New release never returned HTTP 200. Restoring v${{ steps.prev_release.outputs.prev }}."
+          heroku rollback "v${{ steps.prev_release.outputs.prev }}" --app physlibsearch
+
+          RESTORED=""
+          for attempt in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 20 "$HEALTHCHECK_URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Rollback healthy (HTTP 200) after $attempt attempt(s)."
+              RESTORED=1
+              break
+            fi
+            sleep 15
+          done
+
+          {
+            echo "## Deploy failed — rolled back"
+            echo ""
+            echo "The new image did not serve traffic, so v${{ steps.prev_release.outputs.prev }} was restored."
+            if [ -n "$RESTORED" ]; then
+              echo ""
+              echo "**The site is back up on the previous release.** The index work is safe in"
+              echo "Postgres; only the image that ships it failed. Re-running is safe."
+            else
+              echo ""
+              echo "**THE SITE IS STILL DOWN after rollback — this needs a human now.**"
+              echo "Check \`heroku logs --app physlibsearch\` and \`heroku releases\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1
+
+      # Only record the indexed SHA once the deploy is verified. Otherwise a failed
+      # deploy would mark this PhysLib revision as done and the next run would skip
+      # it, silently stranding the work.
+      - name: Mark PhysLib revision as indexed
+        if: steps.gate.outputs.proceed == 'true' && steps.verify.outcome == 'success'
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          heroku config:set LAST_PHYSLIB_SHA=${{ steps.check.outputs.current_sha }} --app physlibsearch
