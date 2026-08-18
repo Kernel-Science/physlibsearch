@@ -1,0 +1,65 @@
+Fix jixia to compile against Lean v4.33.0.
+
+Same situation as the v4.32.0 patch beside this one: PhysLib tracks Lean
+releases (v4.32.0 on 2026-07-21, v4.33.0 shortly after) far faster than
+upstream jixia, which has been on v4.29.0 since April.
+
+Taken verbatim from jarfo/jixia@v4.33.0-rc2, which targets this Lean release
+directly. The only difference from the v4.32.0 patch is `docString?`, which
+takes one field here and two in v4.32.0 -- so the two patches cannot be
+merged into one, and the workflow tries each in turn.
+
+Verified with a clean-tree build against v4.33.0: 40/40 jobs.
+
+Delete this once upstream jixia supports the toolchain PhysLib is on.
+
+--- a/Analyzer/Process/Declaration.lean	2026-08-18 11:14:40
++++ b/Analyzer/Process/Declaration.lean	2026-08-18 11:12:36
+@@ -176,7 +176,7 @@
+   let scopeInfo ← getScopeInfo
+   let mut modifiers ← elabModifiers stx[2]
+   if let some leadingDocComment := stx[0].getOptional? then
+-    modifiers := { modifiers with docString? := some ⟨leadingDocComment, false⟩ }
++    modifiers := { modifiers with docString? := some ⟨leadingDocComment⟩ }
+   let id := stx[3]
+   let name := id.getId
+   let name ← getFullname modifiers <| parentName ++ name
+@@ -226,10 +226,10 @@
+       Syntax.node2 .none ``Command.optDeclSig decl[2] decl[4]
+     | _ => unreachable!
+ 
+-  let (id, binders, type, value) := ← if isDefLike decl then do
++  let (id, binders, type, value) ← if isDefLike decl then do
+     let defView ← mkDefView modifiers decl
+-    return (defView.declId, defView.binders, defView.type?, some defView.value)
+-  else
++    pure (defView.declId, defView.binders, defView.type?, some defView.value)
++  else do
+     let (binders, type) := match kind with
+     | ``Command.«axiom» =>
+       expandDeclSig decl[2] |>.map id some
+@@ -239,7 +239,7 @@
+     | ``Command.«structure» =>
+       (decl[2], decl[4])
+     | _ => unreachable!
+-    return (decl[1], binders, type, none)
++    pure (decl[1], binders, type, (none : Option Syntax))
+ 
+   let name := id[0].getId
+   let name ← getFullname modifiers name
+--- a/Analyzer/Process.lean	2026-08-18 11:14:40
++++ b/Analyzer/Process.lean	2026-08-18 11:12:36
+@@ -81,9 +81,11 @@
+   let body ← Process.plugins.mapM fun (name, plugin) => do
+     let cond := mkIdent (param ++ name ++ (Name.mkSimple "isPresent"))
+     let action := mkIdent (param ++ name ++ (Name.mkSimple "output"))
+-    let term := mkIdent plugin.getResult
++    let getResult := mkIdent plugin.getResult
++    -- `nestedAction` parses a `doElem` after `←`, so the antiquotation needs an explicit
++    -- `:term` annotation
+     return (← `(doSeqItem| if $cond then
+-      $action:term (← $term)
++      $action:term (← $getResult:term)
+     ))
+   let term ← `(fun $(mkIdent param) => do $body*)
+   let type ← `(Options → CommandElabM Unit)
