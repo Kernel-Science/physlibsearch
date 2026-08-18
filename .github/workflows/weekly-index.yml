@@ -190,6 +190,42 @@ jobs:
           exit 1
         timeout-minutes: 30
 
+      # A jixia that compiles can still emit JSON this pipeline cannot parse: the
+      # v4.33.0 patch built fine, then failed two hours into the load because Lean
+      # changed docString from [text, bool] to a bare string. Run jixia over one
+      # small module and parse the result the same way the loader does, so that
+      # class of mismatch surfaces in seconds instead of mid-run.
+      - name: Smoke-test jixia output
+        id: smoke
+        if: steps.build_jixia.outcome == 'success'
+        continue-on-error: true
+        run: |
+          MODULE=$(find physlib/Physlib -name '*.lean' | head -1)
+          echo "Smoke-testing against $MODULE"
+          cd physlib
+          lake env ../jixia/.lake/build/bin/jixia -i \
+            -m /tmp/smoke.mod.json -d /tmp/smoke.decl.json -s /tmp/smoke.sym.json \
+            "../$MODULE" 2>&1 | tail -3
+          cd ..
+          python3 - <<'PY'
+          import sys
+          from jixia.structs import Declaration, Symbol
+          # Import for its compatibility shims before validating anything.
+          import database.jixia_db  # noqa: F401
+          try:
+              decls = Declaration.from_json_file("/tmp/smoke.decl.json")
+              syms = Symbol.from_json_file("/tmp/smoke.sym.json")
+          except Exception as exc:
+              sys.exit(f"::error::jixia output does not match what the loader expects: {exc}")
+          print(f"parsed {len(decls)} declarations, {len(syms)} symbols")
+          PY
+
+      - name: Fail if jixia output is unparseable
+        if: steps.build_jixia.outcome == 'success' && steps.smoke.outcome != 'success'
+        run: |
+          echo "::error title=jixia output incompatible::jixia built, but its output could not be parsed. Lean likely changed a field's shape -- see the smoke-test step. Fix database/jixia_db.py rather than waiting for the multi-hour load to fail."
+          exit 1
+
       # Decide whether indexing can proceed.
       #
       # "PhysLib unchanged" is a real no-op and passes quietly. But if PhysLib has

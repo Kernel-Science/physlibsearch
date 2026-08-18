@@ -4,12 +4,28 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from jixia import LeanProject
-from jixia.structs import LeanName, Symbol, Declaration, is_internal
+from jixia.structs import LeanName, Modifiers, Symbol, Declaration, is_internal
 from psycopg import Connection
 from psycopg.types.json import Jsonb
 from psycopg.types.range import Range
 
 logger = logging.getLogger(__name__)
+
+
+# jixia's model types docString as Lean's older [text, bool] pair. Lean 4.33
+# emits a bare string instead, which fails validation for every declaration that
+# has a docstring. Widen the field so either shape parses: only the text is ever
+# stored, so the flag's representation is not something worth tracking.
+Modifiers.model_fields["docstring"].annotation = tuple[str, bool] | str | None
+Modifiers.model_rebuild(force=True)
+
+
+def _docstring_text(modifiers: Modifiers) -> str | None:
+    """The docstring text, however Lean chose to represent it."""
+    docstring = modifiers.docstring
+    if isinstance(docstring, (list, tuple)):
+        return docstring[0] if docstring else None
+    return docstring
 
 
 def _get_signature(declaration: Declaration, module_content):
@@ -156,7 +172,7 @@ def load_data(project: LeanProject, analysis: list[tuple[Path, list[LeanName]]],
                     "index": index,
                     "name": Jsonb(decl.name) if decl.kind != "example" else None,
                     "visible": decl.modifiers.visibility != "private" and decl.kind != "example",
-                    "docstring": decl.modifiers.docstring,
+                    "docstring": _docstring_text(decl.modifiers),
                     "kind": decl.kind,
                     "signature": _get_signature(decl, module_content),
                     "value": _get_value(decl, module_content),
