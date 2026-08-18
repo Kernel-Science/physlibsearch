@@ -145,27 +145,49 @@ jobs:
         # to PhysLib's Lean toolchain. Build jixia with the same toolchain so the
         # olean headers are compatible (otherwise: "incompatible header").
         #
-        # PhysLib bumps Lean faster than jixia supports it, so the stock build can
-        # fail on a new Lean release. When that happens, retry with our local
-        # compatibility patch. The patch is applied ONLY as a fallback, so the day
-        # upstream catches up we silently go back to stock and the patch can be
-        # deleted. If neither builds, the gate below skips indexing.
+        # PhysLib bumps Lean faster than jixia supports it (three bumps since July
+        # while jixia sat on v4.29.0), so the stock build usually fails. Fall back
+        # to the compatibility patches in patches/, trying each until one builds.
+        #
+        # Each patch targets a specific Lean release and they are NOT
+        # interchangeable -- e.g. `docString?` takes two fields in v4.32.0 and one
+        # in v4.33.0 -- so adding support for a new Lean release means dropping in
+        # another patch file here, with no change to this workflow.
+        #
+        # Stock is always tried first, so the day upstream catches up we go back to
+        # it automatically and the patches can be deleted. If nothing builds, the
+        # gate below fails the run rather than silently skipping.
         continue-on-error: true
         run: |
           cp physlib/lean-toolchain jixia/lean-toolchain
+          TOOLCHAIN=$(cat physlib/lean-toolchain)
           cd jixia
+
           if lake build; then
             echo "jixia built from upstream unpatched."
             exit 0
           fi
-          PATCH=../patches/jixia-lean-4.32.patch
-          echo "::warning::Stock jixia build failed; retrying with $PATCH"
-          if ! git apply "$PATCH"; then
-            echo "::error::Compatibility patch no longer applies to upstream jixia. It likely needs regenerating for the current jixia/Lean versions."
-            exit 1
-          fi
-          lake build
-          echo "jixia built with local compatibility patch."
+
+          echo "::warning::Stock jixia build failed against $TOOLCHAIN; trying compatibility patches."
+          for PATCH in ../patches/jixia-lean-*.patch; do
+            [ -e "$PATCH" ] || continue
+            NAME=$(basename "$PATCH")
+            if ! git apply --check "$PATCH" 2>/dev/null; then
+              echo "  $NAME: does not apply, skipping"
+              continue
+            fi
+            git apply "$PATCH"
+            if lake build; then
+              echo "jixia built with $NAME."
+              exit 0
+            fi
+            echo "  $NAME: applied but did not build, reverting"
+            git apply -R "$PATCH"
+            lake clean || true
+          done
+
+          echo "::error title=No jixia build works::Neither upstream jixia nor any patch in patches/ builds against $TOOLCHAIN. A new patch is needed for this Lean release -- see patches/README.md."
+          exit 1
         timeout-minutes: 30
 
       # Decide whether indexing can proceed.
