@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from jixia import LeanProject
-from jixia.structs import LeanName, Modifiers, Symbol, Declaration, is_internal
+from jixia.structs import LeanName, Modifiers, RootModel, Symbol, Declaration, is_internal
 from psycopg import Connection
 from psycopg.types.json import Jsonb
 from psycopg.types.range import Range
@@ -12,12 +12,37 @@ from psycopg.types.range import Range
 logger = logging.getLogger(__name__)
 
 
-# jixia's model types docString as Lean's older [text, bool] pair. Lean 4.33
-# emits a bare string instead, which fails validation for every declaration that
-# has a docstring. Widen the field so either shape parses: only the text is ever
-# stored, so the flag's representation is not something worth tracking.
-Modifiers.model_fields["docstring"].annotation = tuple[str, bool] | str | None
-Modifiers.model_rebuild(force=True)
+# jixia's model types docString as Lean's older [text, bool] pair, but Lean 4.33
+# emits a bare string, so every declaration carrying a docstring fails to
+# validate. Widening Modifiers' annotation does not fix this: Declaration and
+# Symbol compile their own nested copy of Modifiers' schema at class-creation
+# time, and rebuilding Modifiers afterwards leaves those copies untouched.
+#
+# Normalize the raw JSON to the pair form before pydantic sees it instead. Every
+# read goes through RootModel.from_obj, so this covers Declaration, Symbol, and
+# anything else jixia loads, without depending on schema internals.
+def _normalize_docstrings(node):
+    if isinstance(node, dict):
+        docstring = node.get("docString")
+        if isinstance(docstring, str):
+            node["docString"] = [docstring, False]
+        for value in node.values():
+            _normalize_docstrings(value)
+    elif isinstance(node, list):
+        for value in node:
+            _normalize_docstrings(value)
+    return node
+
+
+_jixia_from_obj = RootModel.from_obj.__func__
+
+
+@classmethod
+def _from_obj_normalized(cls, obj):
+    return _jixia_from_obj(cls, _normalize_docstrings(obj))
+
+
+RootModel.from_obj = _from_obj_normalized
 
 
 def _docstring_text(modifiers: Modifiers) -> str | None:
