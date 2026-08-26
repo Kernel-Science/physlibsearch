@@ -17,7 +17,10 @@ jobs:
     env:
       PHYSLIB_REPO: https://github.com/leanprover-community/physlib
       JIXIA_REPO: https://github.com/frenzymath/jixia
-      MODULE_NAMES: Physlib
+      # Every Lean library PhysLib declares in its lakefile. PhyslibAlpha is not
+      # in the repo's defaultTargets, so it has to be built explicitly below --
+      # jixia reads .olean files and cannot analyse what lake never compiled.
+      MODULE_NAMES: Physlib,PhyslibAlpha,QuantumInfo
       DRY_RUN: 'false'
       # Each jixia worker loads ~2-3 GB of Mathlib; cap concurrency so the
       # runner (16 GB) doesn't get OOM-killed during the load step.
@@ -117,10 +120,16 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
+      # Build every library named in MODULE_NAMES, not just lake's defaultTargets
+      # (which omit PhyslibAlpha). jixia analyses .olean files, so a library that
+      # is never compiled is silently absent from the index rather than an error.
       - name: Build PhysLib
         if: steps.check.outputs.has_changes == 'true'
-        run: cd physlib && lake exe cache get && lake build
-        timeout-minutes: 90
+        run: |
+          cd physlib
+          lake exe cache get
+          lake build $(echo "$MODULE_NAMES" | tr ',' ' ')
+        timeout-minutes: 120
 
       # jixia must be cloned before its cache step
       - name: Clone jixia
@@ -297,6 +306,9 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, sys, psycopg
+          from psycopg.types.json import Jsonb
+
+          expected = [n.strip() for n in os.environ["MODULE_NAMES"].split(",") if n.strip()]
           with psycopg.connect(os.environ["CONNECTION_STRING"], autocommit=True) as conn, conn.cursor() as c:
               c.execute("SELECT COUNT(*) FROM module")
               modules = c.fetchone()[0]
@@ -304,9 +316,27 @@ jobs:
               symbols = c.fetchone()[0]
               c.execute("SELECT COUNT(*) FROM declaration")
               declarations = c.fetchone()[0]
+              # Every namespace in MODULE_NAMES must actually be present. A library
+              # that failed to build produces no modules and would otherwise vanish
+              # from the index silently -- which is how PhyslibAlpha went missing.
+              per_namespace = {}
+              for name in expected:
+                  c.execute("SELECT COUNT(*) FROM module WHERE name->>0 = %s", (name,))
+                  per_namespace[name] = c.fetchone()[0]
+
           print(f"modules={modules} symbols={symbols} declarations={declarations}")
+          for name, count in per_namespace.items():
+              print(f"  {name}: {count} modules")
+
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as fh:
-              fh.write(f"\nIndex after load: {modules} modules, {symbols} symbols, {declarations} declarations\n")
+              fh.write(f"\nIndex after load: {modules} modules, {symbols} symbols, {declarations} declarations\n\n")
+              for name, count in per_namespace.items():
+                  fh.write(f"- `{name}`: {count} modules\n")
+
+          missing = [n for n, count in per_namespace.items() if count == 0]
+          if missing:
+              sys.exit(f"::error::Indexed nothing for: {', '.join(missing)}. The library likely did not build -- check that it is a lean_lib in PhysLib's lakefile and that the build step compiled it.")
+
           # These floors would only be crossed by a analyzer producing garbage;
           # normal incremental runs land far above them.
           if modules < 100 or symbols < 1000 or declarations < 1000:
