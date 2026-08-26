@@ -120,13 +120,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: physlib/.lake/build
-          # Keyed on MODULE_NAMES as well: which libraries were compiled is part
-          # of what this cache holds, so a Physlib-only build must not be reused
-          # verbatim once more libraries are indexed.
-          key: physlib-lake-${{ steps.check.outputs.current_sha }}-${{ hashFiles('.github/workflows/weekly-index.yml') }}
+          # Namespaced by MODULE_NAMES: which libraries this holds is part of the
+          # cache's identity. The restore-key must stay inside that namespace --
+          # a broader fallback silently restores a build missing whole libraries,
+          # and lake then treats them as up to date, so their .olean files never
+          # appear and jixia fails per-module with "object file does not exist".
+          key: physlib-lake-${{ hashFiles('.github/workflows/weekly-index.yml') }}-${{ steps.check.outputs.current_sha }}
           restore-keys: |
-            physlib-lake-${{ steps.check.outputs.current_sha }}-
-            physlib-lake-
+            physlib-lake-${{ hashFiles('.github/workflows/weekly-index.yml') }}-
 
       - name: Install elan
         if: steps.check.outputs.has_changes == 'true'
