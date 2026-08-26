@@ -4,12 +4,25 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from jixia import LeanProject
-from jixia.structs import LeanName, Modifiers, RootModel, Symbol, Declaration, is_internal
+from jixia.structs import LeanName, Modifiers, RootModel, Symbol, Declaration
+from jixia.structs import is_internal as _jixia_is_internal
 from psycopg import Connection
 from psycopg.types.json import Jsonb
 from psycopg.types.range import Range
 
 logger = logging.getLogger(__name__)
+
+
+def is_internal(name: LeanName) -> bool:
+    """Treat anonymous declarations as internal.
+
+    jixia's is_internal indexes name[-1], so an empty name raises IndexError and
+    aborts the whole load. Nameless entries cannot be stored or searched for
+    anyway, so classify them as internal and let the callers skip them.
+    """
+    if not name:
+        return True
+    return _jixia_is_internal(name)
 
 
 # jixia's model types docString as Lean's older [text, bool] pair, but Lean 4.33
