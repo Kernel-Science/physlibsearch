@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 3 * * *'  # Daily at 03:00 UTC
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Index even if PhysLib has not changed (use after widening MODULE_NAMES)'
+        type: boolean
+        default: false
 
 # Never let two indexing runs touch the database or Heroku image at once.
 concurrency:
@@ -64,6 +69,10 @@ jobs:
 
       # Check if PhysLib has changed since the last successful run.
       # The last SHA is stored as a Heroku config var to avoid git commits.
+      #
+      # The SHA only tracks PhysLib. It says nothing about whether OUR config
+      # changed, so widening MODULE_NAMES leaves work to do at an unchanged SHA --
+      # run with force=true after doing that, otherwise the run skips everything.
       - name: Check PhysLib for new commits
         id: check
         env:
@@ -72,7 +81,10 @@ jobs:
           CURRENT_SHA=$(git ls-remote "$PHYSLIB_REPO" HEAD | cut -f1)
           LAST_SHA=$(heroku config:get LAST_PHYSLIB_SHA --app physlibsearch 2>/dev/null || echo "")
           echo "current_sha=$CURRENT_SHA" >> "$GITHUB_OUTPUT"
-          if [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Forced: indexing $CURRENT_SHA regardless of the last indexed SHA."
+          elif [ "$CURRENT_SHA" = "$LAST_SHA" ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
             echo "PhysLib unchanged at $CURRENT_SHA — nothing to do."
           else
@@ -108,8 +120,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: physlib/.lake/build
-          key: physlib-lake-${{ steps.check.outputs.current_sha }}
-          restore-keys: physlib-lake-
+          # Keyed on MODULE_NAMES as well: which libraries were compiled is part
+          # of what this cache holds, so a Physlib-only build must not be reused
+          # verbatim once more libraries are indexed.
+          key: physlib-lake-${{ steps.check.outputs.current_sha }}-${{ hashFiles('.github/workflows/weekly-index.yml') }}
+          restore-keys: |
+            physlib-lake-${{ steps.check.outputs.current_sha }}-
+            physlib-lake-
 
       - name: Install elan
         if: steps.check.outputs.has_changes == 'true'
