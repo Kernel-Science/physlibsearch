@@ -12,6 +12,10 @@ logging.basicConfig(
     filemode=os.environ.get("LOG_FILEMODE", "a"),
     level=os.environ.get("LOG_LEVEL", "INFO"),
 )
-jixia.run.executable = os.environ["JIXIA_PATH"]
+# Only the `jixia` subcommand shells out to the analyzer binary. Requiring this
+# at import time breaks `schema`, `informal`, and `vector-db`, which never touch
+# it; that subcommand validates the variable itself.
+if os.environ.get("JIXIA_PATH"):
+    jixia.run.executable = os.environ["JIXIA_PATH"]
 
 main()
